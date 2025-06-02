@@ -1,0 +1,563 @@
+import {
+  type ColumnDef,
+  flexRender,
+  getCoreRowModel,
+  type Table as TSTable,
+  getFacetedRowModel,
+  getFacetedUniqueValues,
+  getPaginationRowModel,
+  getSortedRowModel,
+  useReactTable,
+  getFilteredRowModel,
+  type Column,
+  type TableState,
+} from "@tanstack/react-table";
+import {
+  memo,
+  useMemo,
+  useState,
+  type JSX,
+  type CSSProperties,
+  useEffect,
+} from "react";
+import {
+  Table,
+  TextInput,
+  NumberInput,
+  Select,
+  Button,
+  Menu,
+  Pagination,
+  Checkbox,
+  MultiSelect,
+  ActionIcon,
+} from "@mantine/core";
+import { Icon } from "@iconify/react";
+import type { Dispatch, SetStateAction } from "react";
+
+declare module "@tanstack/react-table" {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  interface ColumnMeta<TData, TValue> {
+    filterVariant?: "text" | "number" | "numberRange" | "select" | "date";
+  }
+}
+
+function TableBody<TData>({ table }: { table: TSTable<TData> }) {
+  return (
+    <Table.Tbody>
+      {table.getRowModel().rows.map((row) => (
+        <Table.Tr key={row.id}>
+          {row.getVisibleCells().map((cell) => (
+            <Table.Td
+              key={cell.id}
+              style={{
+                width: cell.column.getSize(),
+                ...getCommonPinningStyles(cell.column),
+              }}
+            >
+              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+            </Table.Td>
+          ))}
+        </Table.Tr>
+      ))}
+    </Table.Tbody>
+  );
+}
+
+export const MemoizedTableBody = memo(
+  TableBody,
+  (prev, next) => prev.table.options.data === next.table.options.data
+) as typeof TableBody;
+
+const getCommonPinningStyles = <TData,>(
+  column: Column<TData>
+): CSSProperties => {
+  const isPinned = column.getIsPinned();
+  const isLastLeftPinnedColumn =
+    isPinned === "left" && column.getIsLastColumn("left");
+  const isFirstRightPinnedColumn =
+    isPinned === "right" && column.getIsFirstColumn("right");
+
+  return {
+    boxShadow: isLastLeftPinnedColumn
+      ? "-4px 0 4px -4px gray inset"
+      : isFirstRightPinnedColumn
+      ? "4px 0 4px -4px gray inset"
+      : undefined,
+    left: isPinned === "left" ? `${column.getStart("left")}px` : undefined,
+    right: isPinned === "right" ? `${column.getAfter("right")}px` : undefined,
+    opacity: isPinned ? 0.95 : 1,
+    position: isPinned ? "sticky" : "relative",
+    width: column.getSize(),
+    zIndex: isPinned ? 1 : 0,
+  };
+};
+
+export default function DataTable<TData, TValue>({
+  data,
+  setData,
+  tableTitle,
+  columns,
+  rowsPerPageOptions,
+  rowsPerPage,
+  AddComponent,
+}: {
+  data: TData[];
+  setData: Dispatch<SetStateAction<TData[]>>;
+  tableTitle: string;
+  columns: ColumnDef<TData, TValue>[];
+  rowsPerPageOptions: number[];
+  rowsPerPage: number;
+  AddComponent: <TData>({
+    setData,
+  }: {
+    setData: Dispatch<SetStateAction<TData[]>>;
+  }) => JSX.Element;
+}) {
+  const [tableState, setTableState] = useState(() => {
+    const saved = localStorage.getItem(tableTitle);
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  const table = useReactTable({
+    data,
+    columns,
+    enableColumnResizing: true,
+    columnResizeMode: "onChange",
+    state: tableState,
+    onStateChange: (updater) => {
+      setTableState((prev: TableState) =>
+        typeof updater === "function" ? updater(prev) : updater
+      );
+    },
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getFacetedRowModel: getFacetedRowModel(),
+    getFacetedUniqueValues: getFacetedUniqueValues(),
+    getPaginationRowModel: getPaginationRowModel(),
+  });
+
+  const ts = table.getState();
+
+  useEffect(() => {
+    localStorage.setItem(tableTitle, JSON.stringify(table.getState()));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ts, tableTitle]);
+
+  const columnSizeVars = useMemo(() => {
+    const headers = table.getFlatHeaders();
+    const colSizes: { [key: string]: number } = {};
+    for (let i = 0; i < headers.length; i++) {
+      const header = headers[i]!;
+      colSizes[`--header-${header.id}-size`] = header.getSize();
+      colSizes[`--col-${header.column.id}-size`] = header.column.getSize();
+    }
+    return colSizes;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [table.getState().columnSizingInfo, table.getState().columnSizing]);
+
+  return (
+    <div className="p-4">
+      <div className="flex justify-between items-center mb-3">
+        <div className="flex gap-3 items-center">
+          <p className="font-semibold text-2xl">{tableTitle}</p>
+          <AddComponent<TData> setData={setData} />
+        </div>
+        <ColumnVisibilityMenu table={table} />
+      </div>
+
+      <Table.ScrollContainer minWidth={"80vw"}>
+        <Table
+          stickyHeader
+          style={{
+            ...columnSizeVars,
+            width: table.getTotalSize(),
+          }}
+          striped
+          withTableBorder
+          withColumnBorders
+        >
+          <Table.Thead>
+            {table.getHeaderGroups().map((headerGroup) => (
+              <Table.Tr key={headerGroup.id}>
+                {headerGroup.headers.map((header) => (
+                  <Table.Th
+                    key={header.id}
+                    colSpan={header.colSpan}
+                    style={{
+                      width: `calc(var(--header-${header?.id}-size) * 1px)`,
+                      position: "relative",
+                      ...getCommonPinningStyles(header.column),
+                    }}
+                  >
+                    {header.id != "Ops" ? (
+                      header.isPlaceholder ? null : (
+                        <div
+                          className={`flex items-center justify-between gap-2  ${
+                            header.column.getCanSort()
+                              ? "cursor-pointer select-none"
+                              : ""
+                          }`}
+                          onClick={header.column.getToggleSortingHandler()}
+                        >
+                          <div className="flex gap-2 items-center">
+                            <p>
+                              {flexRender(
+                                header.column.columnDef.header,
+                                header.getContext()
+                              )}
+                            </p>
+                            {
+                              {
+                                asc: (
+                                  <Icon
+                                    icon="tabler:arrow-narrow-up"
+                                    className="size-4"
+                                  />
+                                ),
+                                desc: (
+                                  <Icon
+                                    icon="tabler:arrow-narrow-down"
+                                    className="size-4"
+                                  />
+                                ),
+                                false: (
+                                  <Icon
+                                    icon="tabler:arrows-down-up"
+                                    className="size-4 opacity-70"
+                                  />
+                                ),
+                              }[header.column.getIsSorted() as string]
+                            }
+                          </div>
+
+                          {!header.isPlaceholder &&
+                            header.column.getCanPin() && (
+                              <div className="mr-3 flex gap-2 items-center">
+                                {header.column.getIsPinned() !== "left" ? (
+                                  <ActionIcon
+                                    size="xs"
+                                    className="border rounded px-2"
+                                    onClick={() => {
+                                      header.column.pin("left");
+                                    }}
+                                  >
+                                    <Icon icon="tabler:chevron-left" />
+                                  </ActionIcon>
+                                ) : null}
+                                {header.column.getIsPinned() ? (
+                                  <ActionIcon
+                                    size="xs"
+                                    className="border rounded px-2"
+                                    onClick={() => {
+                                      header.column.pin(false);
+                                    }}
+                                  >
+                                    <Icon icon="tabler:x" />
+                                  </ActionIcon>
+                                ) : null}
+                                {header.column.getIsPinned() !== "right" ? (
+                                  <ActionIcon
+                                    size="xs"
+                                    className="border rounded px-2"
+                                    onClick={() => {
+                                      header.column.pin("right");
+                                    }}
+                                  >
+                                    <Icon icon="tabler:chevron-right" />
+                                  </ActionIcon>
+                                ) : null}
+                              </div>
+                            )}
+                        </div>
+                      )
+                    ) : header.isPlaceholder ? null : (
+                      <div
+                        className={`flex-col items-center justify-between space-y-2 max-w-fit   ${
+                          header.column.getCanSort()
+                            ? "cursor-pointer select-none"
+                            : ""
+                        }`}
+                        onClick={header.column.getToggleSortingHandler()}
+                      >
+                        <div className="flex gap-2 items-center max-w-fit">
+                          <p>
+                            {flexRender(
+                              header.column.columnDef.header,
+                              header.getContext()
+                            )}
+                          </p>
+                          {
+                            {
+                              asc: (
+                                <Icon
+                                  icon="tabler:arrow-narrow-up"
+                                  className="size-4"
+                                />
+                              ),
+                              desc: (
+                                <Icon
+                                  icon="tabler:arrow-narrow-down"
+                                  className="size-4"
+                                />
+                              ),
+                              false: (
+                                <Icon
+                                  icon="tabler:arrows-down-up"
+                                  className="size-4 opacity-70"
+                                />
+                              ),
+                            }[header.column.getIsSorted() as string]
+                          }
+                        </div>
+
+                        {!header.isPlaceholder && header.column.getCanPin() && (
+                          <div className="flex gap-2 items-center max-w-fit">
+                            {header.column.getIsPinned() !== "left" ? (
+                              <ActionIcon
+                                size="xs"
+                                className="border rounded px-2"
+                                onClick={() => {
+                                  header.column.pin("left");
+                                }}
+                              >
+                                <Icon icon="tabler:chevron-left" />
+                              </ActionIcon>
+                            ) : null}
+                            {header.column.getIsPinned() ? (
+                              <ActionIcon
+                                size="xs"
+                                className="border rounded px-2"
+                                onClick={() => {
+                                  header.column.pin(false);
+                                }}
+                              >
+                                <Icon icon="tabler:x" />
+                              </ActionIcon>
+                            ) : null}
+                            {header.column.getIsPinned() !== "right" ? (
+                              <ActionIcon
+                                size="xs"
+                                className="border rounded px-2"
+                                onClick={() => {
+                                  header.column.pin("right");
+                                }}
+                              >
+                                <Icon icon="tabler:chevron-right" />
+                              </ActionIcon>
+                            ) : null}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {header.column.getCanFilter() && (
+                      <div className="mt-1 mr-3">
+                        <ColumnFilter column={header.column} table={table} />
+                      </div>
+                    )}
+
+                    {header.column.getCanResize() && (
+                      <div
+                        {...{
+                          onDoubleClick: () => header.column.resetSize(),
+                          onMouseDown: header.getResizeHandler(),
+                          onTouchStart: header.getResizeHandler(),
+                          className: `absolute right-0 top-0 h-full w-1 cursor-col-resize select-none bg-blue-200`,
+                        }}
+                      />
+                    )}
+                  </Table.Th>
+                ))}
+              </Table.Tr>
+            ))}
+          </Table.Thead>
+
+          {table.getState().columnSizingInfo.isResizingColumn ? (
+            <MemoizedTableBody<TData> table={table} />
+          ) : (
+            <TableBody<TData> table={table} />
+          )}
+        </Table>
+      </Table.ScrollContainer>
+
+      <div className="mt-4 flex justify-between items-center">
+        <div className="flex gap-3 items-center">
+          <p className="text-sm text-gray-700 dark:text-slate-50">
+            {`${table.getFilteredRowModel().rows.length} of ${
+              table.getPrePaginationRowModel().rows.length
+            } rows`}
+          </p>
+          <NumberInput
+            className="w-20"
+            value={table.getState().pagination.pageIndex + 1}
+            onChange={(value) => {
+              const pageIndex = value ? Number(value) - 1 : 0;
+              if (pageIndex >= 0 && pageIndex < table.getPageCount()) {
+                table.setPageIndex(pageIndex);
+              }
+            }}
+          />
+        </div>
+        <Pagination
+          className="mx-auto"
+          total={table.getPageCount()}
+          value={table.getState().pagination.pageIndex + 1}
+          onChange={(page) => table.setPageIndex(page - 1)}
+          siblings={2}
+          boundaries={2}
+        />
+        <div>
+          <Select
+            data={rowsPerPageOptions.map((q) => q.toString())}
+            withCheckIcon
+            value={
+              table.getState().pagination?.pageSize.toString() ||
+              rowsPerPage.toString()
+            }
+            onChange={(value) =>
+              table.setPageSize(
+                parseInt(
+                  value || table.getState().pagination?.pageSize.toString(),
+                  10
+                )
+              )
+            }
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ColumnFilter<TData, TValue>({
+  column,
+}: {
+  column: Column<TData, TValue>;
+  table: TSTable<TData>;
+}) {
+  const columnFilterValue = column.getFilterValue();
+  const { filterVariant } = column.columnDef.meta ?? {};
+
+  if (filterVariant === "numberRange") {
+    const facetedValues = Array.from(
+      column.getFacetedUniqueValues()?.keys() ?? []
+    );
+    const numericValues = facetedValues.filter(
+      (v) => typeof v === "number"
+    ) as number[];
+
+    const minVal = Math.min(...numericValues);
+    const maxVal = Math.max(...numericValues);
+
+    return (
+      <div className="flex gap-3 items-center">
+        <NumberInput
+          value={(columnFilterValue as [number, number])?.[0] ?? ""}
+          onChange={(value) =>
+            column.setFilterValue((old: [number, number]) => [value, old?.[1]])
+          }
+          placeholder={`Min (${minVal})`}
+          min={minVal}
+          max={maxVal}
+          className="w-full"
+        />
+        <NumberInput
+          value={(columnFilterValue as [number, number])?.[1] ?? ""}
+          onChange={(value) =>
+            column.setFilterValue((old: [number, number]) => [old?.[0], value])
+          }
+          placeholder={`Max (${maxVal})`}
+          min={minVal}
+          max={maxVal}
+          className="w-full"
+        />
+      </div>
+    );
+  }
+
+  if (filterVariant === "select") {
+    const facetedOptions = Array.from(
+      column.getFacetedUniqueValues()?.keys() ?? []
+    ).sort();
+
+    return (
+      <MultiSelect
+        onChange={(val) => column.setFilterValue(val)}
+        clearable
+        data={facetedOptions.map((option) => ({
+          label: String(option),
+          value: String(option),
+        }))}
+        value={
+          columnFilterValue
+            ? Array.isArray(columnFilterValue)
+              ? columnFilterValue
+              : [columnFilterValue]
+            : []
+        }
+      />
+    );
+  }
+
+  if (filterVariant === "number") {
+    const facetedValues = Array.from(
+      column.getFacetedUniqueValues()?.keys() ?? []
+    );
+    const numericValues = facetedValues.filter(
+      (v) => typeof v === "number"
+    ) as number[];
+
+    const minVal = Math.min(...numericValues);
+    const maxVal = Math.max(...numericValues);
+    return (
+      <NumberInput
+        value={Number(columnFilterValue || "") || ""}
+        onChange={(value) => column.setFilterValue(Number(value) || "")}
+        placeholder={`${minVal} - ${maxVal}`}
+        className="w-full"
+      />
+    );
+  }
+
+  return (
+    <TextInput
+      value={String(columnFilterValue ?? "")}
+      onChange={(e) => column.setFilterValue(e.currentTarget.value)}
+      placeholder="Filter"
+      className="w-full"
+    />
+  );
+}
+
+function ColumnVisibilityMenu<TData>({ table }: { table: TSTable<TData> }) {
+  return (
+    <Menu closeOnItemClick={false}>
+      <Menu.Target>
+        <Button
+          rightSection={
+            <Icon
+              icon="tabler:chevron-down"
+              className="size-5"
+              strokeWidth={4}
+            />
+          }
+        >
+          Columns
+        </Button>
+      </Menu.Target>
+      <Menu.Dropdown>
+        {table.getAllLeafColumns().map((column) => (
+          <Menu.Item key={column.id}>
+            <Checkbox
+              onClick={() => column.toggleVisibility(!column.getIsVisible())}
+              label={column.id}
+              checked={column.getIsVisible()}
+            />
+          </Menu.Item>
+        ))}
+      </Menu.Dropdown>
+    </Menu>
+  );
+}
