@@ -10,15 +10,16 @@ import {
   useReactTable,
   getFilteredRowModel,
   type Column,
+  type FilterFn,
   type TableState,
 } from "@tanstack/react-table";
 import {
   memo,
   useMemo,
-  useState,
   type JSX,
   type CSSProperties,
   useEffect,
+  useState,
 } from "react";
 import {
   Table,
@@ -34,11 +35,17 @@ import {
 } from "@mantine/core";
 import { Icon } from "@iconify/react";
 import type { Dispatch, SetStateAction } from "react";
+import { DateInput } from "@mantine/dates";
+import dayjs, { Dayjs } from "dayjs";
+import { useDebouncedCallback } from "@mantine/hooks";
 
 declare module "@tanstack/react-table" {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface ColumnMeta<TData, TValue> {
     filterVariant?: "text" | "number" | "numberRange" | "select" | "date";
+  }
+  interface FilterFns {
+    dateBetweenFilterFn: FilterFn<unknown>;
   }
 }
 
@@ -93,6 +100,26 @@ const getCommonPinningStyles = <TData,>(
   };
 };
 
+function GlobalFilter<TData>({ table }: { table: TSTable<TData> }) {
+  const [value, setValue] = useState("");
+
+  const debounced = useDebouncedCallback((value: string) => {
+    table.setGlobalFilter(value);
+  }, 200);
+
+  return (
+    <TextInput
+      placeholder="Search..."
+      value={value}
+      onChange={(e) => {
+        const input = e.currentTarget.value;
+        setValue(input);
+        debounced(input);
+      }}
+    />
+  );
+}
+
 export default function DataTable<TData, TValue>({
   data,
   setData,
@@ -119,6 +146,28 @@ export default function DataTable<TData, TValue>({
     return saved ? JSON.parse(saved) : {};
   });
 
+  const dateBetweenFilterFn: FilterFn<TData> = (row, columnId, value) => {
+    const cellValue = dayjs(row.getValue(columnId));
+    const [start, end] = value as [Dayjs | null, Dayjs | null];
+
+    if (!cellValue.isValid()) return false;
+
+    console.log({ cellValue, compare: [start, end] });
+
+    if (start && !end?.isValid()) {
+      return dayjs(start).isBefore(dayjs(cellValue));
+    } else if (!start?.isValid() && end) {
+      return dayjs(cellValue).isBefore(dayjs(end));
+    } else if (start && end && start?.isValid() && end?.isValid()) {
+      return (
+        dayjs(start).isBefore(dayjs(cellValue)) &&
+        dayjs(cellValue).isBefore(dayjs(end))
+      );
+    }
+
+    return true;
+  };
+
   const table = useReactTable({
     data,
     columns,
@@ -129,6 +178,9 @@ export default function DataTable<TData, TValue>({
       setTableState((prev: TableState) =>
         typeof updater === "function" ? updater(prev) : updater
       );
+    },
+    filterFns: {
+      dateBetweenFilterFn: dateBetweenFilterFn,
     },
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
@@ -143,7 +195,7 @@ export default function DataTable<TData, TValue>({
   useEffect(() => {
     localStorage.setItem(tableTitle, JSON.stringify(table.getState()));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ts, tableTitle]);
+  }, [ts]);
 
   const columnSizeVars = useMemo(() => {
     const headers = table.getFlatHeaders();
@@ -162,9 +214,21 @@ export default function DataTable<TData, TValue>({
       <div className="flex justify-between items-center mb-3">
         <div className="flex gap-3 items-center">
           <p className="font-semibold text-2xl">{tableTitle}</p>
-          <AddComponent<TData> setData={setData} />
+          <div className="relative">
+            <GlobalFilter table={table} />
+            {table.getState().globalFilter && (
+              <Icon
+                onClick={() => table.resetGlobalFilter()}
+                icon="tabler:x"
+                className="absolute top-1/4 right-1 size-5 text-red-500"
+              />
+            )}
+          </div>
         </div>
-        <ColumnVisibilityMenu table={table} />
+        <div className="flex gap-3">
+          <AddComponent<TData> setData={setData} />
+          <ColumnVisibilityMenu table={table} />
+        </div>
       </div>
 
       <Table.ScrollContainer minWidth={"80vw"}>
@@ -513,11 +577,52 @@ function ColumnFilter<TData, TValue>({
     const maxVal = Math.max(...numericValues);
     return (
       <NumberInput
-        value={Number(columnFilterValue || "") || ""}
+        value={Number(columnFilterValue)}
         onChange={(value) => column.setFilterValue(Number(value) || "")}
         placeholder={`${minVal} - ${maxVal}`}
         className="w-full"
       />
+    );
+  }
+
+  if (filterVariant === "date") {
+    const [startDate, endDate] = (columnFilterValue as [
+      Dayjs | null,
+      Dayjs | null
+    ]) || [null, null];
+
+    return (
+      <div>
+        <div className="flex space-x-2">
+          <DateInput
+            clearable
+            value={startDate?.toDate()}
+            onChange={(value) =>
+              column.setFilterValue((old: [Dayjs | null, Dayjs | null]) => [
+                value ? dayjs(value) : value,
+                old?.[1],
+              ])
+            }
+            placeholder="Start date"
+            valueFormat="YYYY-MM-DD"
+            className="w-full"
+          />
+          <DateInput
+            clearable
+            value={endDate?.toDate()}
+            onChange={(value) =>
+              column.setFilterValue((old: [Dayjs | null, Dayjs | null]) => [
+                old?.[0],
+                value ? dayjs(value) : value,
+              ])
+            }
+            placeholder="End date"
+            valueFormat="YYYY-MM-DD"
+            className="w-full"
+          />
+        </div>
+        <div className="h-1" />
+      </div>
     );
   }
 
