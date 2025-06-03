@@ -297,9 +297,9 @@ export default function TableTesting() {
     {
       accessorKey: "birthDate",
       header: "Birth Date",
-      meta: { filterVariant: "date" },
-      footer: (props) => props.column.id,
+      meta: { filterVariant: "dateRange" },
       filterFn: "dateBetweenFilterFn",
+      footer: (props) => props.column.id,
       cell: (cellContext: CellContext<UserType, unknown>) => {
         const value = cellContext.getValue();
         return value instanceof Date

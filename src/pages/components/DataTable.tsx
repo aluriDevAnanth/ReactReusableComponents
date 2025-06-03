@@ -42,7 +42,7 @@ import { useDebouncedCallback } from "@mantine/hooks";
 declare module "@tanstack/react-table" {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface ColumnMeta<TData, TValue> {
-    filterVariant?: "text" | "number" | "numberRange" | "select" | "date";
+    filterVariant?: "text" | "number" | "numberRange" | "select" | "dateRange";
   }
   interface FilterFns {
     dateBetweenFilterFn: FilterFn<unknown>;
@@ -105,18 +105,30 @@ function GlobalFilter<TData>({ table }: { table: TSTable<TData> }) {
 
   const debounced = useDebouncedCallback((value: string) => {
     table.setGlobalFilter(value);
-  }, 200);
+  }, 300);
 
   return (
-    <TextInput
-      placeholder="Search..."
-      value={value}
-      onChange={(e) => {
-        const input = e.currentTarget.value;
-        setValue(input);
-        debounced(input);
-      }}
-    />
+    <div className="relative">
+      <TextInput
+        placeholder="Search..."
+        value={value}
+        onChange={(e) => {
+          const input = e.currentTarget.value;
+          setValue(input);
+          debounced(input);
+        }}
+      />
+      {table.getState().globalFilter && (
+        <Icon
+          onClick={() => {
+            table.resetGlobalFilter();
+            setValue("");
+          }}
+          icon="tabler:x"
+          className="absolute top-1/4 right-1 size-5 text-red-500"
+        />
+      )}
+    </div>
   );
 }
 
@@ -214,16 +226,7 @@ export default function DataTable<TData, TValue>({
       <div className="flex justify-between items-center mb-3">
         <div className="flex gap-3 items-center">
           <p className="font-semibold text-2xl">{tableTitle}</p>
-          <div className="relative">
-            <GlobalFilter table={table} />
-            {table.getState().globalFilter && (
-              <Icon
-                onClick={() => table.resetGlobalFilter()}
-                icon="tabler:x"
-                className="absolute top-1/4 right-1 size-5 text-red-500"
-              />
-            )}
-          </div>
+          <GlobalFilter table={table} />
         </div>
         <div className="flex gap-3">
           <AddComponent<TData> setData={setData} />
@@ -418,7 +421,7 @@ export default function DataTable<TData, TValue>({
 
                     {header.column.getCanFilter() && (
                       <div className="mt-1 mr-3">
-                        <ColumnFilter column={header.column} table={table} />
+                        <ColumnFilter column={header.column} />
                       </div>
                     )}
 
@@ -499,11 +502,52 @@ function ColumnFilter<TData, TValue>({
   column,
 }: {
   column: Column<TData, TValue>;
-  table: TSTable<TData>;
 }) {
   const columnFilterValue = column.getFilterValue();
   const { filterVariant } = column.columnDef.meta ?? {};
 
+  // === Top-level state ===
+  const [textValue, setTextValue] = useState(String(columnFilterValue ?? ""));
+  const [numberValue, setNumberValue] = useState<number | "">(
+    Number(columnFilterValue) || ""
+  );
+  const [numberMin, setNumberMin] = useState<number | "">(
+    (columnFilterValue as [number, number])?.[0] ?? ""
+  );
+  const [numberMax, setNumberMax] = useState<number | "">(
+    (columnFilterValue as [number, number])?.[1] ?? ""
+  );
+  const [dateStart, setDateStart] = useState<Dayjs | null>(
+    (columnFilterValue as [Dayjs | null, Dayjs | null])?.[0] ?? null
+  );
+  const [dateEnd, setDateEnd] = useState<Dayjs | null>(
+    (columnFilterValue as [Dayjs | null, Dayjs | null])?.[1] ?? null
+  );
+
+  // === Debounced callbacks ===
+  const debouncedText = useDebouncedCallback((val: string) => {
+    column.setFilterValue(val);
+  }, 300);
+
+  const debouncedNumber = useDebouncedCallback((val: number | "") => {
+    column.setFilterValue(val === 0 || val ? val : "");
+  }, 300);
+
+  const debouncedNumberRange = useDebouncedCallback(
+    (val: [number | "", number | ""]) => {
+      column.setFilterValue(val);
+    },
+    300
+  );
+
+  const debouncedDateRange = useDebouncedCallback(
+    (val: [Dayjs | null, Dayjs | null]) => {
+      column.setFilterValue(val);
+    },
+    300
+  );
+
+  // === Render filters ===
   if (filterVariant === "numberRange") {
     const facetedValues = Array.from(
       column.getFacetedUniqueValues()?.keys() ?? []
@@ -511,27 +555,28 @@ function ColumnFilter<TData, TValue>({
     const numericValues = facetedValues.filter(
       (v) => typeof v === "number"
     ) as number[];
-
     const minVal = Math.min(...numericValues);
     const maxVal = Math.max(...numericValues);
 
     return (
       <div className="flex gap-3 items-center">
         <NumberInput
-          value={(columnFilterValue as [number, number])?.[0] ?? ""}
-          onChange={(value) =>
-            column.setFilterValue((old: [number, number]) => [value, old?.[1]])
-          }
+          value={numberMin}
+          onChange={(value) => {
+            setNumberMin(value as number);
+            debouncedNumberRange([value as number, numberMax]);
+          }}
           placeholder={`Min (${minVal})`}
           min={minVal}
           max={maxVal}
           className="w-full"
         />
         <NumberInput
-          value={(columnFilterValue as [number, number])?.[1] ?? ""}
-          onChange={(value) =>
-            column.setFilterValue((old: [number, number]) => [old?.[0], value])
-          }
+          value={numberMax}
+          onChange={(value) => {
+            setNumberMax(value as number);
+            debouncedNumberRange([numberMin, value as number]);
+          }}
           placeholder={`Max (${maxVal})`}
           min={minVal}
           max={maxVal}
@@ -550,6 +595,8 @@ function ColumnFilter<TData, TValue>({
       <MultiSelect
         onChange={(val) => column.setFilterValue(val)}
         clearable
+        searchable
+        hidePickedOptions
         data={facetedOptions.map((option) => ({
           label: String(option),
           value: String(option),
@@ -572,50 +619,47 @@ function ColumnFilter<TData, TValue>({
     const numericValues = facetedValues.filter(
       (v) => typeof v === "number"
     ) as number[];
-
     const minVal = Math.min(...numericValues);
     const maxVal = Math.max(...numericValues);
+
     return (
       <NumberInput
-        value={Number(columnFilterValue)}
-        onChange={(value) => column.setFilterValue(Number(value) || "")}
+        value={numberValue}
+        onChange={(value) => {
+          setNumberValue(value as number);
+          debouncedNumber(value as number);
+        }}
         placeholder={`${minVal} - ${maxVal}`}
         className="w-full"
       />
     );
   }
 
-  if (filterVariant === "date") {
-    const [startDate, endDate] = (columnFilterValue as [
-      Dayjs | null,
-      Dayjs | null
-    ]) || [null, null];
+  if (filterVariant === "dateRange") {
+    const startDayjs = dateStart ? dayjs(dateStart) : null;
+    const endDayjs = dateEnd ? dayjs(dateEnd) : null;
 
     return (
       <div>
         <div className="flex space-x-2">
           <DateInput
             clearable
-            value={startDate?.toDate()}
-            onChange={(value) =>
-              column.setFilterValue((old: [Dayjs | null, Dayjs | null]) => [
-                value ? dayjs(value) : value,
-                old?.[1],
-              ])
-            }
+            value={dateStart?.toDate()}
+            onChange={(value) => {
+              setDateStart(value ? dayjs(value) : null);
+              debouncedDateRange([value ? dayjs(value) : null, endDayjs]);
+            }}
             placeholder="Start date"
             valueFormat="YYYY-MM-DD"
             className="w-full"
           />
           <DateInput
             clearable
-            value={endDate?.toDate()}
-            onChange={(value) =>
-              column.setFilterValue((old: [Dayjs | null, Dayjs | null]) => [
-                old?.[0],
-                value ? dayjs(value) : value,
-              ])
-            }
+            value={dateEnd?.toDate()}
+            onChange={(value) => {
+              setDateEnd(value ? dayjs(value) : null);
+              debouncedDateRange([startDayjs, value ? dayjs(value) : null]);
+            }}
             placeholder="End date"
             valueFormat="YYYY-MM-DD"
             className="w-full"
@@ -628,8 +672,12 @@ function ColumnFilter<TData, TValue>({
 
   return (
     <TextInput
-      value={String(columnFilterValue ?? "")}
-      onChange={(e) => column.setFilterValue(e.currentTarget.value)}
+      value={textValue}
+      onChange={(e) => {
+        const val = e.currentTarget.value;
+        setTextValue(val);
+        debouncedText(val);
+      }}
       placeholder="Filter"
       className="w-full"
     />
