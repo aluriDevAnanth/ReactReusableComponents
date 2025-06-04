@@ -27,6 +27,8 @@ import {
   Checkbox,
   MultiSelect,
   ActionIcon,
+  useMantineColorScheme,
+  type MantineColorScheme,
 } from '@mantine/core';
 
 import { Icon } from '@iconify/react';
@@ -130,6 +132,8 @@ export default function DataTable<TData, TValue>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [table.getState().columnSizingInfo, table.getState().columnSizing]);
 
+  const { colorScheme } = useMantineColorScheme();
+
   return (
     <div className='p-4'>
       <div className='flex justify-between items-center mb-3'>
@@ -165,7 +169,7 @@ export default function DataTable<TData, TValue>({
                     style={{
                       width: `calc(var(--header-${header?.id}-size) * 1px)`,
                       position: 'relative',
-                      ...getCommonPinningStyles(header.column),
+                      ...getCommonPinningStyles(header.column, colorScheme),
                     }}
                   >
                     {!header.column.columnDef.meta?.isActionColumn ? (
@@ -228,7 +232,7 @@ export default function DataTable<TData, TValue>({
                       )
                     ) : header.isPlaceholder ? null : (
                       <div
-                        className={`flex-col items-center justify-between space-y-2 max-w-fit   ${
+                        className={`flex-col items-center justify-between space-y-2 max-w-fit mx-auto ${
                           header.column.getCanSort() ? 'cursor-pointer select-none' : ''
                         }`}
                         onClick={header.column.getToggleSortingHandler()}
@@ -352,6 +356,8 @@ export default function DataTable<TData, TValue>({
 }
 
 function TableBody<TData>({ table }: { table: TSTable<TData> }) {
+  const { colorScheme } = useMantineColorScheme();
+
   return (
     <Table.Tbody>
       {table.getRowModel().rows.map((row) => (
@@ -361,7 +367,7 @@ function TableBody<TData>({ table }: { table: TSTable<TData> }) {
               key={cell.id}
               style={{
                 width: cell.column.getSize(),
-                ...getCommonPinningStyles(cell.column),
+                ...getCommonPinningStyles(cell.column, colorScheme),
               }}
             >
               {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -378,7 +384,7 @@ const MemoizedTableBody = memo(
   (prev, next) => prev.table.options.data === next.table.options.data,
 ) as typeof TableBody;
 
-function getCommonPinningStyles<TData>(column: Column<TData>): CSSProperties {
+function getCommonPinningStyles<TData>(column: Column<TData>, colorScheme: MantineColorScheme): CSSProperties {
   const isPinned = column.getIsPinned();
   const isLastLeftPinnedColumn = isPinned === 'left' && column.getIsLastColumn('left');
   const isFirstRightPinnedColumn = isPinned === 'right' && column.getIsFirstColumn('right');
@@ -391,10 +397,11 @@ function getCommonPinningStyles<TData>(column: Column<TData>): CSSProperties {
       : undefined,
     left: isPinned === 'left' ? `${column.getStart('left')}px` : undefined,
     right: isPinned === 'right' ? `${column.getAfter('right')}px` : undefined,
-    opacity: isPinned ? 0.95 : 1,
+    opacity: 1,
     position: isPinned ? 'sticky' : 'relative',
     width: column.getSize(),
     zIndex: isPinned ? 1 : 0,
+    backgroundColor: isPinned ? (colorScheme == 'dark' ? 'black' : 'white') : undefined,
   };
 }
 

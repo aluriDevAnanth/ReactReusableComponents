@@ -33,6 +33,7 @@ function AddComponent<TData>({ setData }: { setData: Dispatch<SetStateAction<TDa
         <Icon icon='tabler:plus' className='stroke-3 size-[70%]' />
       </ActionIcon>
       <Modal
+        withCloseButton={false}
         yOffset='3vh'
         size='50vw'
         transitionProps={{
@@ -42,11 +43,10 @@ function AddComponent<TData>({ setData }: { setData: Dispatch<SetStateAction<TDa
         }}
         opened={open}
         onClose={() => setOpen(false)}
-        title={<p className='text-xl font-semibold'>Add Users</p>}
       >
         <div className='flex justify-center items-center w-full'>
           <form onSubmit={formState.handleSubmit(AddFunction)} className='w-full'>
-            <Fieldset legend='User Registration' className='mx-auto grid grid-cols-2 gap-4'>
+            <Fieldset legend={<p className='text-2xl font-semibold'>Add User</p>} className='mx-auto grid grid-cols-2 gap-4'>
               <TextInput
                 {...formState.register('name')}
                 data-autofocus
@@ -128,8 +128,9 @@ function UserOpsCell({ row, setData }: { row: Row<UserType>; setData: React.Disp
   }
 
   return (
-    <div className='flex justify-center'>
+    <div className='flex justify-center gap-2'>
       <Modal
+        withCloseButton={false}
         yOffset='3vh'
         size='50vw'
         transitionProps={{
@@ -139,10 +140,9 @@ function UserOpsCell({ row, setData }: { row: Row<UserType>; setData: React.Disp
         }}
         opened={open}
         onClose={() => setOpen(false)}
-        title={<p className='text-xl font-semibold'>Add Users</p>}
       >
         <form onSubmit={formState.handleSubmit(editFunction)} className='w-full'>
-          <Fieldset legend='User Registration' className='mx-auto grid grid-cols-2 gap-4'>
+          <Fieldset legend={<p className='text-xl font-semibold'>Edit User</p>} className='mx-auto grid grid-cols-2 gap-4'>
             <TextInput
               {...formState.register('name')}
               data-autofocus
@@ -218,6 +218,10 @@ function UserOpsCell({ row, setData }: { row: Row<UserType>; setData: React.Disp
           </Menu.Item>
         </Menu.Dropdown>
       </Menu>
+
+      <ActionIcon size='sm'>
+        <Icon icon='tabler:chevron-down' className='size-4' />
+      </ActionIcon>
     </div>
   );
 }
