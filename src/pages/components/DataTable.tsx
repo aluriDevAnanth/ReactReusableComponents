@@ -12,15 +12,10 @@ import {
   type Column,
   type FilterFn,
   type TableState,
-} from "@tanstack/react-table";
-import {
-  memo,
-  useMemo,
-  type JSX,
-  type CSSProperties,
-  useEffect,
-  useState,
-} from "react";
+} from '@tanstack/react-table';
+
+import { memo, useMemo, type JSX, type CSSProperties, useEffect, useState } from 'react';
+
 import {
   Table,
   TextInput,
@@ -32,104 +27,27 @@ import {
   Checkbox,
   MultiSelect,
   ActionIcon,
-} from "@mantine/core";
-import { Icon } from "@iconify/react";
-import type { Dispatch, SetStateAction } from "react";
-import { DateInput } from "@mantine/dates";
-import dayjs, { Dayjs } from "dayjs";
-import { useDebouncedCallback } from "@mantine/hooks";
+} from '@mantine/core';
 
-declare module "@tanstack/react-table" {
+import { Icon } from '@iconify/react';
+import type { Dispatch, SetStateAction } from 'react';
+import { DateInput } from '@mantine/dates';
+import dayjs, { Dayjs } from 'dayjs';
+import { useDebouncedCallback } from '@mantine/hooks';
+
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
+declare module '@tanstack/react-table' {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface ColumnMeta<TData, TValue> {
-    filterVariant?: "text" | "number" | "numberRange" | "select" | "dateRange";
+    filterVariant?: 'text' | 'number' | 'numberRange' | 'select' | 'dateRange';
+    isActionColumn?: boolean;
   }
   interface FilterFns {
     dateBetweenFilterFn: FilterFn<unknown>;
   }
-}
-
-function TableBody<TData>({ table }: { table: TSTable<TData> }) {
-  return (
-    <Table.Tbody>
-      {table.getRowModel().rows.map((row) => (
-        <Table.Tr key={row.id}>
-          {row.getVisibleCells().map((cell) => (
-            <Table.Td
-              key={cell.id}
-              style={{
-                width: cell.column.getSize(),
-                ...getCommonPinningStyles(cell.column),
-              }}
-            >
-              {flexRender(cell.column.columnDef.cell, cell.getContext())}
-            </Table.Td>
-          ))}
-        </Table.Tr>
-      ))}
-    </Table.Tbody>
-  );
-}
-
-export const MemoizedTableBody = memo(
-  TableBody,
-  (prev, next) => prev.table.options.data === next.table.options.data
-) as typeof TableBody;
-
-const getCommonPinningStyles = <TData,>(
-  column: Column<TData>
-): CSSProperties => {
-  const isPinned = column.getIsPinned();
-  const isLastLeftPinnedColumn =
-    isPinned === "left" && column.getIsLastColumn("left");
-  const isFirstRightPinnedColumn =
-    isPinned === "right" && column.getIsFirstColumn("right");
-
-  return {
-    boxShadow: isLastLeftPinnedColumn
-      ? "-4px 0 4px -4px gray inset"
-      : isFirstRightPinnedColumn
-      ? "4px 0 4px -4px gray inset"
-      : undefined,
-    left: isPinned === "left" ? `${column.getStart("left")}px` : undefined,
-    right: isPinned === "right" ? `${column.getAfter("right")}px` : undefined,
-    opacity: isPinned ? 0.95 : 1,
-    position: isPinned ? "sticky" : "relative",
-    width: column.getSize(),
-    zIndex: isPinned ? 1 : 0,
-  };
-};
-
-function GlobalFilter<TData>({ table }: { table: TSTable<TData> }) {
-  const [value, setValue] = useState("");
-
-  const debounced = useDebouncedCallback((value: string) => {
-    table.setGlobalFilter(value);
-  }, 300);
-
-  return (
-    <div className="relative">
-      <TextInput
-        placeholder="Search..."
-        value={value}
-        onChange={(e) => {
-          const input = e.currentTarget.value;
-          setValue(input);
-          debounced(input);
-        }}
-      />
-      {table.getState().globalFilter && (
-        <Icon
-          onClick={() => {
-            table.resetGlobalFilter();
-            setValue("");
-          }}
-          icon="tabler:x"
-          className="absolute top-1/4 right-1 size-5 text-red-500"
-        />
-      )}
-    </div>
-  );
 }
 
 export default function DataTable<TData, TValue>({
@@ -147,11 +65,7 @@ export default function DataTable<TData, TValue>({
   columns: ColumnDef<TData, TValue>[];
   rowsPerPageOptions: number[];
   rowsPerPage: number;
-  AddComponent: <TData>({
-    setData,
-  }: {
-    setData: Dispatch<SetStateAction<TData[]>>;
-  }) => JSX.Element;
+  AddComponent: <TData>({ setData }: { setData: Dispatch<SetStateAction<TData[]>> }) => JSX.Element;
 }) {
   const [tableState, setTableState] = useState(() => {
     const saved = localStorage.getItem(tableTitle);
@@ -171,10 +85,7 @@ export default function DataTable<TData, TValue>({
     } else if (!start?.isValid() && end) {
       return dayjs(cellValue).isBefore(dayjs(end));
     } else if (start && end && start?.isValid() && end?.isValid()) {
-      return (
-        dayjs(start).isBefore(dayjs(cellValue)) &&
-        dayjs(cellValue).isBefore(dayjs(end))
-      );
+      return dayjs(start).isBefore(dayjs(cellValue)) && dayjs(cellValue).isBefore(dayjs(end));
     }
 
     return true;
@@ -184,12 +95,10 @@ export default function DataTable<TData, TValue>({
     data,
     columns,
     enableColumnResizing: true,
-    columnResizeMode: "onChange",
+    columnResizeMode: 'onChange',
     state: tableState,
     onStateChange: (updater) => {
-      setTableState((prev: TableState) =>
-        typeof updater === "function" ? updater(prev) : updater
-      );
+      setTableState((prev: TableState) => (typeof updater === 'function' ? updater(prev) : updater));
     },
     filterFns: {
       dateBetweenFilterFn: dateBetweenFilterFn,
@@ -222,19 +131,20 @@ export default function DataTable<TData, TValue>({
   }, [table.getState().columnSizingInfo, table.getState().columnSizing]);
 
   return (
-    <div className="p-4">
-      <div className="flex justify-between items-center mb-3">
-        <div className="flex gap-3 items-center">
-          <p className="font-semibold text-2xl">{tableTitle}</p>
+    <div className='p-4'>
+      <div className='flex justify-between items-center mb-3'>
+        <div className='flex gap-3 items-center'>
+          <p className='font-semibold text-2xl'>{tableTitle}</p>
           <GlobalFilter table={table} />
         </div>
-        <div className="flex gap-3">
+        <div className='flex gap-3'>
           <AddComponent<TData> setData={setData} />
-          <ColumnVisibilityMenu table={table} />
+          <ColumnVisibilityMenu<TData> table={table} />
+          <Settings<TData> table={table} />
         </div>
       </div>
 
-      <Table.ScrollContainer minWidth={"80vw"}>
+      <Table.ScrollContainer minWidth={'80vw'}>
         <Table
           stickyHeader
           style={{
@@ -254,164 +164,119 @@ export default function DataTable<TData, TValue>({
                     colSpan={header.colSpan}
                     style={{
                       width: `calc(var(--header-${header?.id}-size) * 1px)`,
-                      position: "relative",
+                      position: 'relative',
                       ...getCommonPinningStyles(header.column),
                     }}
                   >
-                    {header.id != "Ops" ? (
+                    {!header.column.columnDef.meta?.isActionColumn ? (
                       header.isPlaceholder ? null : (
                         <div
                           className={`flex items-center justify-between gap-2  ${
-                            header.column.getCanSort()
-                              ? "cursor-pointer select-none"
-                              : ""
+                            header.column.getCanSort() ? 'cursor-pointer select-none' : ''
                           }`}
                           onClick={header.column.getToggleSortingHandler()}
                         >
-                          <div className="flex gap-2 items-center">
-                            <p>
-                              {flexRender(
-                                header.column.columnDef.header,
-                                header.getContext()
-                              )}
-                            </p>
+                          <div className='flex gap-2 items-center'>
+                            <p>{flexRender(header.column.columnDef.header, header.getContext())}</p>
                             {
                               {
-                                asc: (
-                                  <Icon
-                                    icon="tabler:arrow-narrow-up"
-                                    className="size-4"
-                                  />
-                                ),
-                                desc: (
-                                  <Icon
-                                    icon="tabler:arrow-narrow-down"
-                                    className="size-4"
-                                  />
-                                ),
-                                false: (
-                                  <Icon
-                                    icon="tabler:arrows-down-up"
-                                    className="size-4 opacity-70"
-                                  />
-                                ),
+                                asc: <Icon icon='tabler:arrow-narrow-up' className='size-4' />,
+                                desc: <Icon icon='tabler:arrow-narrow-down' className='size-4' />,
+                                false: <Icon icon='tabler:arrows-down-up' className='size-4 opacity-70' />,
                               }[header.column.getIsSorted() as string]
                             }
                           </div>
 
-                          {!header.isPlaceholder &&
-                            header.column.getCanPin() && (
-                              <div className="mr-3 flex gap-2 items-center">
-                                {header.column.getIsPinned() !== "left" ? (
-                                  <ActionIcon
-                                    size="xs"
-                                    className="border rounded px-2"
-                                    onClick={() => {
-                                      header.column.pin("left");
-                                    }}
-                                  >
-                                    <Icon icon="tabler:chevron-left" />
-                                  </ActionIcon>
-                                ) : null}
-                                {header.column.getIsPinned() ? (
-                                  <ActionIcon
-                                    size="xs"
-                                    className="border rounded px-2"
-                                    onClick={() => {
-                                      header.column.pin(false);
-                                    }}
-                                  >
-                                    <Icon icon="tabler:x" />
-                                  </ActionIcon>
-                                ) : null}
-                                {header.column.getIsPinned() !== "right" ? (
-                                  <ActionIcon
-                                    size="xs"
-                                    className="border rounded px-2"
-                                    onClick={() => {
-                                      header.column.pin("right");
-                                    }}
-                                  >
-                                    <Icon icon="tabler:chevron-right" />
-                                  </ActionIcon>
-                                ) : null}
-                              </div>
-                            )}
+                          {!header.isPlaceholder && header.column.getCanPin() && (
+                            <div className='mr-3 flex gap-2 items-center'>
+                              {header.column.getIsPinned() !== 'left' ? (
+                                <ActionIcon
+                                  size='xs'
+                                  className='border rounded px-2'
+                                  onClick={() => {
+                                    header.column.pin('left');
+                                  }}
+                                >
+                                  <Icon icon='tabler:chevron-left' />
+                                </ActionIcon>
+                              ) : null}
+                              {header.column.getIsPinned() ? (
+                                <ActionIcon
+                                  size='xs'
+                                  className='border rounded px-2'
+                                  onClick={() => {
+                                    header.column.pin(false);
+                                  }}
+                                >
+                                  <Icon icon='tabler:x' />
+                                </ActionIcon>
+                              ) : null}
+                              {header.column.getIsPinned() !== 'right' ? (
+                                <ActionIcon
+                                  size='xs'
+                                  className='border rounded px-2'
+                                  onClick={() => {
+                                    header.column.pin('right');
+                                  }}
+                                >
+                                  <Icon icon='tabler:chevron-right' />
+                                </ActionIcon>
+                              ) : null}
+                            </div>
+                          )}
                         </div>
                       )
                     ) : header.isPlaceholder ? null : (
                       <div
                         className={`flex-col items-center justify-between space-y-2 max-w-fit   ${
-                          header.column.getCanSort()
-                            ? "cursor-pointer select-none"
-                            : ""
+                          header.column.getCanSort() ? 'cursor-pointer select-none' : ''
                         }`}
                         onClick={header.column.getToggleSortingHandler()}
                       >
-                        <div className="flex gap-2 items-center max-w-fit">
-                          <p>
-                            {flexRender(
-                              header.column.columnDef.header,
-                              header.getContext()
-                            )}
-                          </p>
+                        <div className='flex gap-2 items-center max-w-fit'>
+                          <p>{flexRender(header.column.columnDef.header, header.getContext())}</p>
                           {
                             {
-                              asc: (
-                                <Icon
-                                  icon="tabler:arrow-narrow-up"
-                                  className="size-4"
-                                />
-                              ),
-                              desc: (
-                                <Icon
-                                  icon="tabler:arrow-narrow-down"
-                                  className="size-4"
-                                />
-                              ),
-                              false: (
-                                <Icon
-                                  icon="tabler:arrows-down-up"
-                                  className="size-4 opacity-70"
-                                />
-                              ),
+                              asc: <Icon icon='tabler:arrow-narrow-up' className='size-4' />,
+                              desc: <Icon icon='tabler:arrow-narrow-down' className='size-4' />,
+                              false: <Icon icon='tabler:arrows-down-up' className='size-4 opacity-70' />,
                             }[header.column.getIsSorted() as string]
                           }
                         </div>
 
                         {!header.isPlaceholder && header.column.getCanPin() && (
-                          <div className="flex gap-2 items-center max-w-fit">
-                            {header.column.getIsPinned() !== "left" ? (
+                          <div className='flex gap-2 items-center max-w-fit'>
+                            {header.column.getIsPinned() !== 'left' ? (
                               <ActionIcon
-                                size="xs"
-                                className="border rounded px-2"
+                                size='xs'
+                                className='border rounded px-2'
                                 onClick={() => {
-                                  header.column.pin("left");
+                                  header.column.pin('left');
                                 }}
                               >
-                                <Icon icon="tabler:chevron-left" />
+                                <Icon icon='tabler:chevron-left' />
                               </ActionIcon>
                             ) : null}
                             {header.column.getIsPinned() ? (
                               <ActionIcon
-                                size="xs"
-                                className="border rounded px-2"
+                                size='xs'
+                                className='border rounded px-2'
                                 onClick={() => {
                                   header.column.pin(false);
                                 }}
                               >
-                                <Icon icon="tabler:x" />
+                                <Icon icon='tabler:x' />
                               </ActionIcon>
                             ) : null}
-                            {header.column.getIsPinned() !== "right" ? (
+                            {header.column.getIsPinned() !== 'right' ? (
                               <ActionIcon
-                                size="xs"
-                                className="border rounded px-2"
+                                size='xs'
+                                className='border rounded px-2'
                                 onClick={() => {
-                                  header.column.pin("right");
+                                  header.column.pin('right');
                                 }}
                               >
-                                <Icon icon="tabler:chevron-right" />
+                                <Icon icon='tabler:chevron-right' />
                               </ActionIcon>
                             ) : null}
                           </div>
@@ -420,7 +285,7 @@ export default function DataTable<TData, TValue>({
                     )}
 
                     {header.column.getCanFilter() && (
-                      <div className="mt-1 mr-3">
+                      <div className='mt-1 mr-3'>
                         <ColumnFilter column={header.column} />
                       </div>
                     )}
@@ -449,15 +314,13 @@ export default function DataTable<TData, TValue>({
         </Table>
       </Table.ScrollContainer>
 
-      <div className="mt-4 flex justify-between items-center">
-        <div className="flex gap-3 items-center">
-          <p className="text-sm text-gray-700 dark:text-slate-50">
-            {`${table.getFilteredRowModel().rows.length} of ${
-              table.getPrePaginationRowModel().rows.length
-            } rows`}
+      <div className='mt-4 flex justify-between items-center'>
+        <div className='flex gap-3 items-center'>
+          <p className='text-sm text-gray-700 dark:text-slate-50'>
+            {`${table.getFilteredRowModel().rows.length} of ${table.getPrePaginationRowModel().rows.length} rows`}
           </p>
           <NumberInput
-            className="w-20"
+            className='w-20'
             value={table.getState().pagination.pageIndex + 1}
             onChange={(value) => {
               const pageIndex = value ? Number(value) - 1 : 0;
@@ -468,7 +331,7 @@ export default function DataTable<TData, TValue>({
           />
         </div>
         <Pagination
-          className="mx-auto"
+          className='mx-auto'
           total={table.getPageCount()}
           value={table.getState().pagination.pageIndex + 1}
           onChange={(page) => table.setPageIndex(page - 1)}
@@ -479,18 +342,8 @@ export default function DataTable<TData, TValue>({
           <Select
             data={rowsPerPageOptions.map((q) => q.toString())}
             withCheckIcon
-            value={
-              table.getState().pagination?.pageSize.toString() ||
-              rowsPerPage.toString()
-            }
-            onChange={(value) =>
-              table.setPageSize(
-                parseInt(
-                  value || table.getState().pagination?.pageSize.toString(),
-                  10
-                )
-              )
-            }
+            value={table.getState().pagination?.pageSize.toString() || rowsPerPage.toString()}
+            onChange={(value) => table.setPageSize(parseInt(value || table.getState().pagination?.pageSize.toString(), 10))}
           />
         </div>
       </div>
@@ -498,68 +351,138 @@ export default function DataTable<TData, TValue>({
   );
 }
 
-function ColumnFilter<TData, TValue>({
-  column,
-}: {
-  column: Column<TData, TValue>;
-}) {
+function TableBody<TData>({ table }: { table: TSTable<TData> }) {
+  return (
+    <Table.Tbody>
+      {table.getRowModel().rows.map((row) => (
+        <Table.Tr key={row.id}>
+          {row.getVisibleCells().map((cell) => (
+            <Table.Td
+              key={cell.id}
+              style={{
+                width: cell.column.getSize(),
+                ...getCommonPinningStyles(cell.column),
+              }}
+            >
+              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+            </Table.Td>
+          ))}
+        </Table.Tr>
+      ))}
+    </Table.Tbody>
+  );
+}
+
+const MemoizedTableBody = memo(
+  TableBody,
+  (prev, next) => prev.table.options.data === next.table.options.data,
+) as typeof TableBody;
+
+function getCommonPinningStyles<TData>(column: Column<TData>): CSSProperties {
+  const isPinned = column.getIsPinned();
+  const isLastLeftPinnedColumn = isPinned === 'left' && column.getIsLastColumn('left');
+  const isFirstRightPinnedColumn = isPinned === 'right' && column.getIsFirstColumn('right');
+
+  return {
+    boxShadow: isLastLeftPinnedColumn
+      ? '-4px 0 4px -4px gray inset'
+      : isFirstRightPinnedColumn
+      ? '4px 0 4px -4px gray inset'
+      : undefined,
+    left: isPinned === 'left' ? `${column.getStart('left')}px` : undefined,
+    right: isPinned === 'right' ? `${column.getAfter('right')}px` : undefined,
+    opacity: isPinned ? 0.95 : 1,
+    position: isPinned ? 'sticky' : 'relative',
+    width: column.getSize(),
+    zIndex: isPinned ? 1 : 0,
+  };
+}
+
+function GlobalFilter<TData>({ table }: { table: TSTable<TData> }) {
+  const [value, setValue] = useState('');
+
+  const debounced = useDebouncedCallback(
+    (value: string) => {
+      table.setGlobalFilter(value);
+    },
+    { delay: 300, flushOnUnmount: true },
+  );
+
+  return (
+    <div className='relative'>
+      <TextInput
+        placeholder='Search...'
+        value={value}
+        onChange={(e) => {
+          const input = e.currentTarget.value;
+          setValue(input);
+          debounced(input);
+        }}
+      />
+      {table.getState().globalFilter && (
+        <Icon
+          onClick={() => {
+            table.resetGlobalFilter();
+            setValue('');
+          }}
+          icon='tabler:x'
+          className='absolute top-1/4 right-1 size-5 text-red-500'
+        />
+      )}
+    </div>
+  );
+}
+
+function ColumnFilter<TData, TValue>({ column }: { column: Column<TData, TValue> }) {
   const columnFilterValue = column.getFilterValue();
   const { filterVariant } = column.columnDef.meta ?? {};
 
   // === Top-level state ===
-  const [textValue, setTextValue] = useState(String(columnFilterValue ?? ""));
-  const [numberValue, setNumberValue] = useState<number | "">(
-    Number(columnFilterValue) || ""
-  );
-  const [numberMin, setNumberMin] = useState<number | "">(
-    (columnFilterValue as [number, number])?.[0] ?? ""
-  );
-  const [numberMax, setNumberMax] = useState<number | "">(
-    (columnFilterValue as [number, number])?.[1] ?? ""
-  );
-  const [dateStart, setDateStart] = useState<Dayjs | null>(
-    (columnFilterValue as [Dayjs | null, Dayjs | null])?.[0] ?? null
-  );
-  const [dateEnd, setDateEnd] = useState<Dayjs | null>(
-    (columnFilterValue as [Dayjs | null, Dayjs | null])?.[1] ?? null
-  );
+  const [textValue, setTextValue] = useState(String(columnFilterValue ?? ''));
+  const [numberValue, setNumberValue] = useState<number | ''>(Number(columnFilterValue) || '');
+  const [numberMin, setNumberMin] = useState<number | ''>((columnFilterValue as [number, number])?.[0] ?? '');
+  const [numberMax, setNumberMax] = useState<number | ''>((columnFilterValue as [number, number])?.[1] ?? '');
+  const [dateStart, setDateStart] = useState<Dayjs | null>((columnFilterValue as [Dayjs | null, Dayjs | null])?.[0] ?? null);
+  const [dateEnd, setDateEnd] = useState<Dayjs | null>((columnFilterValue as [Dayjs | null, Dayjs | null])?.[1] ?? null);
 
   // === Debounced callbacks ===
-  const debouncedText = useDebouncedCallback((val: string) => {
-    column.setFilterValue(val);
-  }, 300);
-
-  const debouncedNumber = useDebouncedCallback((val: number | "") => {
-    column.setFilterValue(val === 0 || val ? val : "");
-  }, 300);
-
-  const debouncedNumberRange = useDebouncedCallback(
-    (val: [number | "", number | ""]) => {
+  const debouncedText = useDebouncedCallback(
+    (val: string) => {
       column.setFilterValue(val);
     },
-    300
+    { delay: 300, flushOnUnmount: true },
+  );
+
+  const debouncedNumber = useDebouncedCallback(
+    (val: number | '') => {
+      column.setFilterValue(val === 0 || val ? val : '');
+    },
+    { delay: 300, flushOnUnmount: true },
+  );
+
+  const debouncedNumberRange = useDebouncedCallback(
+    (val: [number | '', number | '']) => {
+      column.setFilterValue(val);
+    },
+    { delay: 300, flushOnUnmount: true },
   );
 
   const debouncedDateRange = useDebouncedCallback(
     (val: [Dayjs | null, Dayjs | null]) => {
       column.setFilterValue(val);
     },
-    300
+    { delay: 300, flushOnUnmount: true },
   );
 
   // === Render filters ===
-  if (filterVariant === "numberRange") {
-    const facetedValues = Array.from(
-      column.getFacetedUniqueValues()?.keys() ?? []
-    );
-    const numericValues = facetedValues.filter(
-      (v) => typeof v === "number"
-    ) as number[];
+  if (filterVariant === 'numberRange') {
+    const facetedValues = Array.from(column.getFacetedUniqueValues()?.keys() ?? []);
+    const numericValues = facetedValues.filter((v) => typeof v === 'number') as number[];
     const minVal = Math.min(...numericValues);
     const maxVal = Math.max(...numericValues);
 
     return (
-      <div className="flex gap-3 items-center">
+      <div className='flex gap-3 items-center'>
         <NumberInput
           value={numberMin}
           onChange={(value) => {
@@ -569,7 +492,7 @@ function ColumnFilter<TData, TValue>({
           placeholder={`Min (${minVal})`}
           min={minVal}
           max={maxVal}
-          className="w-full"
+          className='w-full'
         />
         <NumberInput
           value={numberMax}
@@ -580,16 +503,14 @@ function ColumnFilter<TData, TValue>({
           placeholder={`Max (${maxVal})`}
           min={minVal}
           max={maxVal}
-          className="w-full"
+          className='w-full'
         />
       </div>
     );
   }
 
-  if (filterVariant === "select") {
-    const facetedOptions = Array.from(
-      column.getFacetedUniqueValues()?.keys() ?? []
-    ).sort();
+  if (filterVariant === 'select') {
+    const facetedOptions = Array.from(column.getFacetedUniqueValues()?.keys() ?? []).sort();
 
     return (
       <MultiSelect
@@ -601,24 +522,14 @@ function ColumnFilter<TData, TValue>({
           label: String(option),
           value: String(option),
         }))}
-        value={
-          columnFilterValue
-            ? Array.isArray(columnFilterValue)
-              ? columnFilterValue
-              : [columnFilterValue]
-            : []
-        }
+        value={columnFilterValue ? (Array.isArray(columnFilterValue) ? columnFilterValue : [columnFilterValue]) : []}
       />
     );
   }
 
-  if (filterVariant === "number") {
-    const facetedValues = Array.from(
-      column.getFacetedUniqueValues()?.keys() ?? []
-    );
-    const numericValues = facetedValues.filter(
-      (v) => typeof v === "number"
-    ) as number[];
+  if (filterVariant === 'number') {
+    const facetedValues = Array.from(column.getFacetedUniqueValues()?.keys() ?? []);
+    const numericValues = facetedValues.filter((v) => typeof v === 'number') as number[];
     const minVal = Math.min(...numericValues);
     const maxVal = Math.max(...numericValues);
 
@@ -630,18 +541,18 @@ function ColumnFilter<TData, TValue>({
           debouncedNumber(value as number);
         }}
         placeholder={`${minVal} - ${maxVal}`}
-        className="w-full"
+        className='w-full'
       />
     );
   }
 
-  if (filterVariant === "dateRange") {
+  if (filterVariant === 'dateRange') {
     const startDayjs = dateStart ? dayjs(dateStart) : null;
     const endDayjs = dateEnd ? dayjs(dateEnd) : null;
 
     return (
       <div>
-        <div className="flex space-x-2">
+        <div className='flex space-x-2'>
           <DateInput
             clearable
             value={dateStart?.toDate()}
@@ -649,9 +560,9 @@ function ColumnFilter<TData, TValue>({
               setDateStart(value ? dayjs(value) : null);
               debouncedDateRange([value ? dayjs(value) : null, endDayjs]);
             }}
-            placeholder="Start date"
-            valueFormat="YYYY-MM-DD"
-            className="w-full"
+            placeholder='Start date'
+            valueFormat='YYYY-MM-DD'
+            className='w-full'
           />
           <DateInput
             clearable
@@ -660,12 +571,12 @@ function ColumnFilter<TData, TValue>({
               setDateEnd(value ? dayjs(value) : null);
               debouncedDateRange([startDayjs, value ? dayjs(value) : null]);
             }}
-            placeholder="End date"
-            valueFormat="YYYY-MM-DD"
-            className="w-full"
+            placeholder='End date'
+            valueFormat='YYYY-MM-DD'
+            className='w-full'
           />
         </div>
-        <div className="h-1" />
+        <div className='h-1' />
       </div>
     );
   }
@@ -678,38 +589,150 @@ function ColumnFilter<TData, TValue>({
         setTextValue(val);
         debouncedText(val);
       }}
-      placeholder="Filter"
-      className="w-full"
+      placeholder='Filter'
+      className='w-full'
     />
   );
 }
 
-function ColumnVisibilityMenu<TData>({ table }: { table: TSTable<TData> }) {
+function SortableColumnItem({
+  columnId,
+  isVisible,
+  toggleVisibility,
+}: {
+  columnId: string;
+  isVisible: boolean;
+  toggleVisibility: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
+    id: columnId,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
   return (
-    <Menu closeOnItemClick={false}>
+    <div ref={setNodeRef} style={style} {...attributes} className='flex items-center gap-2 px-2 py-1 cursor-grab'>
+      <Icon {...listeners} icon='ic:round-drag-indicator' className='size-5' />
+      <Checkbox onClick={toggleVisibility} label={columnId} checked={isVisible} />
+    </div>
+  );
+}
+
+function ColumnVisibilityMenu<TData>({ table }: { table: TSTable<TData> }) {
+  const [columnOrder, setColumnOrder] = useState(() => table.getAllLeafColumns().map((col) => col.id));
+
+  const sensors = useSensors(useSensor(PointerSensor));
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (active.id !== over?.id) {
+      const oldIndex = columnOrder.indexOf(active.id as string);
+      const newIndex = columnOrder.indexOf(over?.id as string);
+      const newOrder = arrayMove(columnOrder, oldIndex, newIndex);
+      setColumnOrder(newOrder);
+      table.setColumnOrder(newOrder);
+    }
+  };
+
+  return (
+    <Menu trigger='hover' closeOnItemClick={false}>
       <Menu.Target>
-        <Button
-          rightSection={
-            <Icon
-              icon="tabler:chevron-down"
-              className="size-5"
-              strokeWidth={4}
-            />
-          }
-        >
-          Columns
-        </Button>
+        <Button>Columns</Button>
       </Menu.Target>
       <Menu.Dropdown>
-        {table.getAllLeafColumns().map((column) => (
-          <Menu.Item key={column.id}>
-            <Checkbox
-              onClick={() => column.toggleVisibility(!column.getIsVisible())}
-              label={column.id}
-              checked={column.getIsVisible()}
-            />
-          </Menu.Item>
-        ))}
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={columnOrder} strategy={verticalListSortingStrategy}>
+            {columnOrder.map((columnId) => {
+              const column = table.getColumn(columnId);
+              if (!column) return null;
+              return (
+                <SortableColumnItem
+                  key={column.id}
+                  columnId={column.id}
+                  isVisible={column.getIsVisible()}
+                  toggleVisibility={() => column.toggleVisibility(!column.getIsVisible())}
+                />
+              );
+            })}
+          </SortableContext>
+        </DndContext>
+      </Menu.Dropdown>
+    </Menu>
+  );
+}
+
+function Settings<TData>({ table }: { table: TSTable<TData> }) {
+  return (
+    <Menu trigger='hover' closeOnItemClick={false}>
+      <Menu.Target>
+        <ActionIcon color='red' size={'lg'}>
+          <Icon icon='tabler:settings' className='size-5' strokeWidth={4} />
+        </ActionIcon>
+      </Menu.Target>
+      <Menu.Dropdown>
+        <Menu.Item
+          leftSection={<Icon icon='tabler:trash' className='size-5 stroke-3' />}
+          color='red'
+          onClick={() => {
+            table.resetColumnFilters();
+            table.resetGlobalFilter();
+          }}
+        >
+          Reset All Filters
+        </Menu.Item>
+        <Menu.Item
+          color='red'
+          leftSection={<Icon icon='tabler:trash' className='size-5 stroke-3' />}
+          onClick={() => table.resetSorting()}
+        >
+          Reset All Sorting
+        </Menu.Item>
+        <Menu.Item
+          color='red'
+          leftSection={<Icon icon='tabler:trash' className='size-5 stroke-3' />}
+          onClick={() => table.resetColumnVisibility()}
+        >
+          Reset Column Visibility
+        </Menu.Item>
+        <Menu.Item
+          color='red'
+          leftSection={<Icon icon='tabler:trash' className='size-5 stroke-3' />}
+          onClick={() => table.resetColumnOrder()}
+        >
+          Reset Column Order
+        </Menu.Item>
+        <Menu.Item
+          color='red'
+          leftSection={<Icon icon='tabler:trash' className='size-5 stroke-3' />}
+          onClick={() => table.resetColumnPinning()}
+        >
+          Reset Column Pinning
+        </Menu.Item>
+        <Menu.Item
+          color='red'
+          leftSection={<Icon icon='tabler:trash' className='size-5 stroke-3' />}
+          onClick={() => table.resetColumnSizing()}
+        >
+          Reset Column Sizing
+        </Menu.Item>
+        <Menu.Item
+          color='red'
+          leftSection={<Icon icon='tabler:trash' className='size-5 stroke-3' />}
+          onClick={() => table.resetPagination()}
+        >
+          Reset Pagination
+        </Menu.Item>
+        <Menu.Item
+          color='red'
+          leftSection={<Icon icon='tabler:trash' className='size-5 stroke-3' />}
+          onClick={() => table.reset()}
+        >
+          Reset Table State
+        </Menu.Item>
       </Menu.Dropdown>
     </Menu>
   );
