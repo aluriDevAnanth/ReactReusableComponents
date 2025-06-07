@@ -1,16 +1,15 @@
 import { UserSchema, type UserType } from '../schemas';
 import DataTable from './components/DataTable';
 import { usersData } from '../utils/data/usersData';
-import type { CellContext, ColumnDef, Row } from '@tanstack/react-table';
+import type { CellContext, ColumnDef, Row, Table } from '@tanstack/react-table';
 import { ActionIcon, Button, Fieldset, Menu, Modal, NumberInput, Select, TextInput } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { DateInput } from '@mantine/dates';
-import type { Dispatch, SetStateAction } from 'react';
 
-function AddComponent<TData>({ setData }: { setData: Dispatch<SetStateAction<TData[]>> }) {
+function AddComponent<TData>({ table }: { table: Table<TData> }) {
   const [open, setOpen] = useState(false);
   const formState = useForm<UserType>({
     resolver: zodResolver(UserSchema),
@@ -19,7 +18,7 @@ function AddComponent<TData>({ setData }: { setData: Dispatch<SetStateAction<TDa
   function AddFunction(values: UserType) {
     try {
       const parsedValues = UserSchema.parse(values);
-      setData((prev) => [parsedValues as TData, ...prev]);
+      table.options.meta?.setData((prev) => [parsedValues as TData, ...prev]);
 
       setOpen(false);
     } catch (e) {
@@ -219,10 +218,25 @@ function UserOpsCell({ row, setData }: { row: Row<UserType>; setData: React.Disp
         </Menu.Dropdown>
       </Menu>
 
-      <ActionIcon size='sm'>
-        <Icon icon='tabler:chevron-down' className='size-4' />
+      <ActionIcon onClick={() => row.toggleExpanded()} size='sm'>
+        {!row.getIsExpanded() ? (
+          <Icon icon='tabler:chevron-down' className='size-4' />
+        ) : (
+          <Icon icon='tabler:chevron-right' className='size-4' />
+        )}
       </ActionIcon>
     </div>
+  );
+}
+
+function RowExpansion<TData>({ row }: { row: Row<TData> }) {
+  return (
+    <>
+      <div className='grid p-2'>
+        <h2 className=' font-bold'>More Details</h2>
+        <pre>{JSON.stringify(row.original, null, 2)}</pre>
+      </div>
+    </>
   );
 }
 
@@ -284,6 +298,7 @@ export default function TableTesting() {
       rowsPerPageOptions={[10, 20, 50, 100]}
       rowsPerPage={10}
       AddComponent={AddComponent}
+      RowExpansion={RowExpansion}
     />
   );
 }

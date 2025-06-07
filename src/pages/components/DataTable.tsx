@@ -12,6 +12,8 @@ import {
   type Column,
   type FilterFn,
   type TableState,
+  type Row,
+  type RowData,
 } from '@tanstack/react-table';
 
 import { memo, useMemo, type JSX, type CSSProperties, useEffect, useState } from 'react';
@@ -35,11 +37,12 @@ import { Icon } from '@iconify/react';
 import type { Dispatch, SetStateAction } from 'react';
 import { DateInput } from '@mantine/dates';
 import dayjs, { Dayjs } from 'dayjs';
-import { useDebouncedCallback } from '@mantine/hooks';
+import { useDebouncedCallback, useFullscreen } from '@mantine/hooks';
 
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import clsx from 'clsx';
 
 declare module '@tanstack/react-table' {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -49,6 +52,9 @@ declare module '@tanstack/react-table' {
   }
   interface FilterFns {
     dateBetweenFilterFn: FilterFn<unknown>;
+  }
+  interface TableMeta<TData extends RowData> {
+    setData: Dispatch<SetStateAction<TData[]>>;
   }
 }
 
@@ -60,6 +66,7 @@ export default function DataTable<TData, TValue>({
   rowsPerPageOptions,
   rowsPerPage,
   AddComponent,
+  RowExpansion,
 }: {
   data: TData[];
   setData: Dispatch<SetStateAction<TData[]>>;
@@ -67,7 +74,9 @@ export default function DataTable<TData, TValue>({
   columns: ColumnDef<TData, TValue>[];
   rowsPerPageOptions: number[];
   rowsPerPage: number;
-  AddComponent: <TData>({ setData }: { setData: Dispatch<SetStateAction<TData[]>> }) => JSX.Element;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  AddComponent: <TData>({ table }: { table: TSTable<TData> }) => JSX.Element;
+  RowExpansion: <TData>({ row }: { row: Row<TData> }) => JSX.Element;
 }) {
   const [tableState, setTableState] = useState(() => {
     const saved = localStorage.getItem(tableTitle);
@@ -105,6 +114,7 @@ export default function DataTable<TData, TValue>({
     filterFns: {
       dateBetweenFilterFn: dateBetweenFilterFn,
     },
+    meta: { setData },
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -134,21 +144,35 @@ export default function DataTable<TData, TValue>({
 
   const { colorScheme } = useMantineColorScheme();
 
+  const { ref, toggle, fullscreen } = useFullscreen();
+
   return (
-    <div className='p-4'>
+    <div ref={ref} className={clsx('p-4', colorScheme == 'light' ? fullscreen && 'bg-white' : fullscreen && 'bg-[#242424]')}>
       <div className='flex justify-between items-center mb-3'>
         <div className='flex gap-3 items-center'>
           <p className='font-semibold text-2xl'>{tableTitle}</p>
           <GlobalFilter table={table} />
         </div>
         <div className='flex gap-3'>
-          <AddComponent<TData> setData={setData} />
+          <AddComponent<TData> table={table} />
           <ColumnVisibilityMenu<TData> table={table} />
+          <ActionIcon size='lg' onClick={toggle}>
+            {fullscreen ? (
+              <Icon icon='tabler:arrows-minimize' className='size-6' />
+            ) : (
+              <Icon icon='tabler:arrows-maximize' className='size-6' />
+            )}
+          </ActionIcon>
           <Settings<TData> table={table} />
         </div>
       </div>
 
-      <Table.ScrollContainer minWidth={'80vw'}>
+      <Table.ScrollContainer
+        scrollAreaProps={{ scrollHideDelay: 500, offsetScrollbars: true }}
+        className='max-w-fit'
+        minWidth={'80vw'}
+        maxHeight={'80vh'}
+      >
         <Table
           stickyHeader
           style={{
@@ -311,9 +335,9 @@ export default function DataTable<TData, TValue>({
           </Table.Thead>
 
           {table.getState().columnSizingInfo.isResizingColumn ? (
-            <MemoizedTableBody<TData> table={table} />
+            <MemoizedTableBody<TData> table={table} RowExpansion={RowExpansion} />
           ) : (
-            <TableBody<TData> table={table} />
+            <TableBody<TData> table={table} RowExpansion={RowExpansion} />
           )}
         </Table>
       </Table.ScrollContainer>
@@ -355,25 +379,40 @@ export default function DataTable<TData, TValue>({
   );
 }
 
-function TableBody<TData>({ table }: { table: TSTable<TData> }) {
+function TableBody<TData>({
+  table,
+  RowExpansion,
+}: {
+  table: TSTable<TData>;
+  RowExpansion: <TData>({ row }: { row: Row<TData> }) => JSX.Element;
+}) {
   const { colorScheme } = useMantineColorScheme();
 
   return (
     <Table.Tbody>
       {table.getRowModel().rows.map((row) => (
-        <Table.Tr key={row.id}>
-          {row.getVisibleCells().map((cell) => (
-            <Table.Td
-              key={cell.id}
-              style={{
-                width: cell.column.getSize(),
-                ...getCommonPinningStyles(cell.column, colorScheme),
-              }}
-            >
-              {flexRender(cell.column.columnDef.cell, cell.getContext())}
-            </Table.Td>
-          ))}
-        </Table.Tr>
+        <>
+          <Table.Tr key={row.id}>
+            {row.getVisibleCells().map((cell) => (
+              <Table.Td
+                key={cell.id}
+                style={{
+                  width: cell.column.getSize(),
+                  ...getCommonPinningStyles(cell.column, colorScheme),
+                }}
+              >
+                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+              </Table.Td>
+            ))}
+          </Table.Tr>
+          {row.getIsExpanded() && (
+            <Table.Tr>
+              <Table.Td colSpan={table.getAllColumns().length} className='border-3 dark:border-gray-500 border-gray-300  '>
+                <RowExpansion<TData> row={row} />
+              </Table.Td>
+            </Table.Tr>
+          )}
+        </>
       ))}
     </Table.Tbody>
   );
