@@ -16,7 +16,7 @@ import {
   type RowData,
 } from '@tanstack/react-table';
 
-import { memo, useMemo, type JSX, type CSSProperties, useEffect, useState } from 'react';
+import { useMemo, type JSX, type CSSProperties, useEffect, useState, useRef } from 'react';
 
 import {
   Table,
@@ -39,10 +39,8 @@ import { DateInput } from '@mantine/dates';
 import dayjs, { Dayjs } from 'dayjs';
 import { useDebouncedCallback, useFullscreen } from '@mantine/hooks';
 
-import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
-import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 import clsx from 'clsx';
+import { ReactSortable } from 'react-sortablejs';
 
 declare module '@tanstack/react-table' {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -67,6 +65,7 @@ export default function DataTable<TData, TValue>({
   rowsPerPage,
   AddComponent,
   RowExpansion,
+  handleExportToCSV,
 }: {
   data: TData[];
   setData: Dispatch<SetStateAction<TData[]>>;
@@ -74,9 +73,9 @@ export default function DataTable<TData, TValue>({
   columns: ColumnDef<TData, TValue>[];
   rowsPerPageOptions: number[];
   rowsPerPage: number;
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   AddComponent: <TData>({ table }: { table: TSTable<TData> }) => JSX.Element;
   RowExpansion: <TData>({ row }: { row: Row<TData> }) => JSX.Element;
+  handleExportToCSV: <TData>(table: TSTable<TData>) => void;
 }) {
   const [tableState, setTableState] = useState(() => {
     const saved = localStorage.getItem(tableTitle);
@@ -88,8 +87,6 @@ export default function DataTable<TData, TValue>({
     const [start, end] = value as [Dayjs | null, Dayjs | null];
 
     if (!cellValue.isValid()) return false;
-
-    console.log({ cellValue, compare: [start, end] });
 
     if (start && !end?.isValid()) {
       return dayjs(start).isBefore(dayjs(cellValue));
@@ -106,7 +103,7 @@ export default function DataTable<TData, TValue>({
     data,
     columns,
     enableColumnResizing: true,
-    columnResizeMode: 'onChange',
+    columnResizeMode: 'onEnd',
     state: tableState,
     onStateChange: (updater) => {
       setTableState((prev: TableState) => (typeof updater === 'function' ? updater(prev) : updater));
@@ -140,14 +137,18 @@ export default function DataTable<TData, TValue>({
     }
     return colSizes;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [table.getState().columnSizingInfo, table.getState().columnSizing]);
+  }, [table.getState().columnSizingInfo]);
 
   const { colorScheme } = useMantineColorScheme();
 
   const { ref, toggle, fullscreen } = useFullscreen();
+  const containerRef = useRef<HTMLTableElement | null>(null);
 
   return (
-    <div ref={ref} className={clsx('p-4', colorScheme == 'light' ? fullscreen && 'bg-white' : fullscreen && 'bg-[#242424]')}>
+    <div
+      ref={ref}
+      className={clsx('p-4', colorScheme == 'light' ? fullscreen && 'bg-white' : fullscreen && 'bg-[#242424]')}
+    >
       <div className='flex justify-between items-center mb-3'>
         <div className='flex gap-3 items-center'>
           <p className='font-semibold text-2xl'>{tableTitle}</p>
@@ -163,48 +164,111 @@ export default function DataTable<TData, TValue>({
               <Icon icon='tabler:arrows-maximize' className='size-6' />
             )}
           </ActionIcon>
+          <ActionIcon onClick={() => handleExportToCSV(table)} size='lg'>
+            <Icon icon='tabler:file-type-csv' className='size-6' />
+          </ActionIcon>
           <Settings<TData> table={table} />
         </div>
       </div>
 
-      <Table.ScrollContainer
-        scrollAreaProps={{ scrollHideDelay: 500, offsetScrollbars: true }}
-        className='max-w-fit'
-        minWidth={'80vw'}
-        maxHeight={'80vh'}
-      >
-        <Table
-          stickyHeader
-          style={{
-            ...columnSizeVars,
-            width: table.getTotalSize(),
-          }}
-          striped
-          withTableBorder
-          withColumnBorders
+      <div ref={containerRef} className='relative'>
+        <Table.ScrollContainer
+          scrollAreaProps={{ scrollHideDelay: 500, offsetScrollbars: true }}
+          className='max-w-fit'
+          minWidth={'80vw'}
+          maxHeight={'80vh'}
         >
-          <Table.Thead>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <Table.Tr key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <Table.Th
-                    key={header.id}
-                    colSpan={header.colSpan}
-                    style={{
-                      width: `calc(var(--header-${header?.id}-size) * 1px)`,
-                      position: 'relative',
-                      ...getCommonPinningStyles(header.column, colorScheme),
-                    }}
-                  >
-                    {!header.column.columnDef.meta?.isActionColumn ? (
-                      header.isPlaceholder ? null : (
+          <Table
+            stickyHeader
+            style={{
+              ...columnSizeVars,
+              width: table.getTotalSize(),
+            }}
+            striped
+            withTableBorder
+            withColumnBorders
+          >
+            <Table.Thead>
+              {table.getHeaderGroups().map((headerGroup) => (
+                <Table.Tr key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => (
+                    <Table.Th
+                      key={header.id}
+                      colSpan={header.colSpan}
+                      style={{
+                        width: `calc(var(--header-${header?.id}-size) * 1px)`,
+                        position: 'relative',
+                        ...getCommonPinningStyles(header.column, colorScheme),
+                      }}
+                    >
+                      {!header.column.columnDef.meta?.isActionColumn ? (
+                        header.isPlaceholder ? null : (
+                          <div
+                            className={`flex items-center justify-between gap-2  ${
+                              header.column.getCanSort() ? 'cursor-pointer select-none' : ''
+                            }`}
+                            onClick={header.column.getToggleSortingHandler()}
+                          >
+                            <div className='flex gap-2 items-center'>
+                              <p className='select-none'>
+                                {flexRender(header.column.columnDef.header, header.getContext())}
+                              </p>
+                              {
+                                {
+                                  asc: <Icon icon='tabler:arrow-narrow-up' className='size-4' />,
+                                  desc: <Icon icon='tabler:arrow-narrow-down' className='size-4' />,
+                                  false: <Icon icon='tabler:arrows-down-up' className='size-4 opacity-70' />,
+                                }[header.column.getIsSorted() as string]
+                              }
+                            </div>
+
+                            {!header.isPlaceholder && header.column.getCanPin() && (
+                              <div className='mr-3 flex gap-2 items-center'>
+                                {header.column.getIsPinned() !== 'left' ? (
+                                  <ActionIcon
+                                    size='xs'
+                                    className='border rounded px-2'
+                                    onClick={() => {
+                                      header.column.pin('left');
+                                    }}
+                                  >
+                                    <Icon icon='tabler:chevron-left' />
+                                  </ActionIcon>
+                                ) : null}
+                                {header.column.getIsPinned() ? (
+                                  <ActionIcon
+                                    size='xs'
+                                    className='border rounded px-2'
+                                    onClick={() => {
+                                      header.column.pin(false);
+                                    }}
+                                  >
+                                    <Icon icon='tabler:x' />
+                                  </ActionIcon>
+                                ) : null}
+                                {header.column.getIsPinned() !== 'right' ? (
+                                  <ActionIcon
+                                    size='xs'
+                                    className='border rounded px-2'
+                                    onClick={() => {
+                                      header.column.pin('right');
+                                    }}
+                                  >
+                                    <Icon icon='tabler:chevron-right' />
+                                  </ActionIcon>
+                                ) : null}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      ) : header.isPlaceholder ? null : (
                         <div
-                          className={`flex items-center justify-between gap-2  ${
+                          className={`flex-col items-center justify-between space-y-2 max-w-fit mx-auto ${
                             header.column.getCanSort() ? 'cursor-pointer select-none' : ''
                           }`}
                           onClick={header.column.getToggleSortingHandler()}
                         >
-                          <div className='flex gap-2 items-center'>
+                          <div className='flex gap-2 items-center max-w-fit'>
                             <p>{flexRender(header.column.columnDef.header, header.getContext())}</p>
                             {
                               {
@@ -216,7 +280,7 @@ export default function DataTable<TData, TValue>({
                           </div>
 
                           {!header.isPlaceholder && header.column.getCanPin() && (
-                            <div className='mr-3 flex gap-2 items-center'>
+                            <div className='flex gap-2 items-center max-w-fit'>
                               {header.column.getIsPinned() !== 'left' ? (
                                 <ActionIcon
                                   size='xs'
@@ -253,94 +317,46 @@ export default function DataTable<TData, TValue>({
                             </div>
                           )}
                         </div>
-                      )
-                    ) : header.isPlaceholder ? null : (
-                      <div
-                        className={`flex-col items-center justify-between space-y-2 max-w-fit mx-auto ${
-                          header.column.getCanSort() ? 'cursor-pointer select-none' : ''
-                        }`}
-                        onClick={header.column.getToggleSortingHandler()}
-                      >
-                        <div className='flex gap-2 items-center max-w-fit'>
-                          <p>{flexRender(header.column.columnDef.header, header.getContext())}</p>
-                          {
-                            {
-                              asc: <Icon icon='tabler:arrow-narrow-up' className='size-4' />,
-                              desc: <Icon icon='tabler:arrow-narrow-down' className='size-4' />,
-                              false: <Icon icon='tabler:arrows-down-up' className='size-4 opacity-70' />,
-                            }[header.column.getIsSorted() as string]
-                          }
+                      )}
+
+                      {header.column.getCanFilter() && (
+                        <div className='mt-1 mr-3'>
+                          <ColumnFilter column={header.column} />
                         </div>
+                      )}
 
-                        {!header.isPlaceholder && header.column.getCanPin() && (
-                          <div className='flex gap-2 items-center max-w-fit'>
-                            {header.column.getIsPinned() !== 'left' ? (
-                              <ActionIcon
-                                size='xs'
-                                className='border rounded px-2'
-                                onClick={() => {
-                                  header.column.pin('left');
-                                }}
-                              >
-                                <Icon icon='tabler:chevron-left' />
-                              </ActionIcon>
-                            ) : null}
-                            {header.column.getIsPinned() ? (
-                              <ActionIcon
-                                size='xs'
-                                className='border rounded px-2'
-                                onClick={() => {
-                                  header.column.pin(false);
-                                }}
-                              >
-                                <Icon icon='tabler:x' />
-                              </ActionIcon>
-                            ) : null}
-                            {header.column.getIsPinned() !== 'right' ? (
-                              <ActionIcon
-                                size='xs'
-                                className='border rounded px-2'
-                                onClick={() => {
-                                  header.column.pin('right');
-                                }}
-                              >
-                                <Icon icon='tabler:chevron-right' />
-                              </ActionIcon>
-                            ) : null}
-                          </div>
-                        )}
-                      </div>
-                    )}
+                      {header.column.getCanResize() && (
+                        <div
+                          {...{
+                            onDoubleClick: () => header.column.resetSize(),
+                            onMouseDown: header.getResizeHandler(),
+                            onTouchStart: header.getResizeHandler(),
+                            className: `absolute right-0 top-0 h-full w-1 cursor-col-resize select-none `,
+                          }}
+                        />
+                      )}
+                    </Table.Th>
+                  ))}
+                </Table.Tr>
+              ))}
+            </Table.Thead>
 
-                    {header.column.getCanFilter() && (
-                      <div className='mt-1 mr-3'>
-                        <ColumnFilter column={header.column} />
-                      </div>
-                    )}
-
-                    {header.column.getCanResize() && (
-                      <div
-                        {...{
-                          onDoubleClick: () => header.column.resetSize(),
-                          onMouseDown: header.getResizeHandler(),
-                          onTouchStart: header.getResizeHandler(),
-                          className: `absolute right-0 top-0 h-full w-1 cursor-col-resize select-none bg-blue-200`,
-                        }}
-                      />
-                    )}
-                  </Table.Th>
-                ))}
-              </Table.Tr>
-            ))}
-          </Table.Thead>
-
-          {table.getState().columnSizingInfo.isResizingColumn ? (
-            <MemoizedTableBody<TData> table={table} RowExpansion={RowExpansion} />
-          ) : (
             <TableBody<TData> table={table} RowExpansion={RowExpansion} />
-          )}
-        </Table>
-      </Table.ScrollContainer>
+          </Table>
+        </Table.ScrollContainer>
+        {table.getState().columnSizingInfo.isResizingColumn && (
+          <div
+            className='absolute top-0 bg-blue-500 w-[2px] z-10 transition-all duration-75'
+            style={{
+              height: containerRef.current?.offsetHeight ?? 0,
+              left:
+                (table.getState().columnSizingInfo.startOffset ?? 0) +
+                (table.getState().columnSizingInfo.deltaOffset ?? 0) -
+                12,
+            }}
+          />
+        )}
+      </div>
 
       <div className='mt-4 flex justify-between items-center'>
         <div className='flex gap-3 items-center'>
@@ -371,7 +387,9 @@ export default function DataTable<TData, TValue>({
             data={rowsPerPageOptions.map((q) => q.toString())}
             withCheckIcon
             value={table.getState().pagination?.pageSize.toString() || rowsPerPage.toString()}
-            onChange={(value) => table.setPageSize(parseInt(value || table.getState().pagination?.pageSize.toString(), 10))}
+            onChange={(value) =>
+              table.setPageSize(parseInt(value || table.getState().pagination?.pageSize.toString(), 10))
+            }
           />
         </div>
       </div>
@@ -407,7 +425,10 @@ function TableBody<TData>({
           </Table.Tr>
           {row.getIsExpanded() && (
             <Table.Tr>
-              <Table.Td colSpan={table.getAllColumns().length} className='border-3 dark:border-gray-500 border-gray-300  '>
+              <Table.Td
+                colSpan={table.getAllColumns().length}
+                className='border-3 dark:border-gray-500 border-gray-300  '
+              >
                 <RowExpansion<TData> row={row} />
               </Table.Td>
             </Table.Tr>
@@ -417,11 +438,6 @@ function TableBody<TData>({
     </Table.Tbody>
   );
 }
-
-const MemoizedTableBody = memo(
-  TableBody,
-  (prev, next) => prev.table.options.data === next.table.options.data,
-) as typeof TableBody;
 
 function getCommonPinningStyles<TData>(column: Column<TData>, colorScheme: MantineColorScheme): CSSProperties {
   const isPinned = column.getIsPinned();
@@ -455,9 +471,10 @@ function GlobalFilter<TData>({ table }: { table: TSTable<TData> }) {
   );
 
   return (
-    <div className='relative'>
+    <div className='relative w-full'>
       <TextInput
         placeholder='Search...'
+        className='w-full'
         value={value}
         onChange={(e) => {
           const input = e.currentTarget.value;
@@ -472,7 +489,7 @@ function GlobalFilter<TData>({ table }: { table: TSTable<TData> }) {
             setValue('');
           }}
           icon='tabler:x'
-          className='absolute top-1/4 right-1 size-5 text-red-500'
+          className='absolute top-1/4 right-1 size-5 text-red-500 cursor-pointer'
         />
       )}
     </div>
@@ -488,8 +505,12 @@ function ColumnFilter<TData, TValue>({ column }: { column: Column<TData, TValue>
   const [numberValue, setNumberValue] = useState<number | ''>(Number(columnFilterValue) || '');
   const [numberMin, setNumberMin] = useState<number | ''>((columnFilterValue as [number, number])?.[0] ?? '');
   const [numberMax, setNumberMax] = useState<number | ''>((columnFilterValue as [number, number])?.[1] ?? '');
-  const [dateStart, setDateStart] = useState<Dayjs | null>((columnFilterValue as [Dayjs | null, Dayjs | null])?.[0] ?? null);
-  const [dateEnd, setDateEnd] = useState<Dayjs | null>((columnFilterValue as [Dayjs | null, Dayjs | null])?.[1] ?? null);
+  const [dateStart, setDateStart] = useState<Dayjs | null>(
+    (columnFilterValue as [Dayjs | null, Dayjs | null])?.[0] ?? null,
+  );
+  const [dateEnd, setDateEnd] = useState<Dayjs | null>(
+    (columnFilterValue as [Dayjs | null, Dayjs | null])?.[1] ?? null,
+  );
 
   // === Debounced callbacks ===
   const debouncedText = useDebouncedCallback(
@@ -641,47 +662,17 @@ function ColumnFilter<TData, TValue>({ column }: { column: Column<TData, TValue>
   );
 }
 
-function SortableColumnItem({
-  columnId,
-  isVisible,
-  toggleVisibility,
-}: {
-  columnId: string;
-  isVisible: boolean;
-  toggleVisibility: () => void;
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
-    id: columnId,
-  });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
+function ColumnVisibilityMenu<TData>({ table }: { table: TSTable<TData> }) {
+  type SortableItem = {
+    id: string;
   };
 
-  return (
-    <div ref={setNodeRef} style={style} {...attributes} className='flex items-center gap-2 px-2 py-1 cursor-grab'>
-      <Icon {...listeners} icon='ic:round-drag-indicator' className='size-5' />
-      <Checkbox onClick={toggleVisibility} label={columnId} checked={isVisible} />
-    </div>
-  );
-}
+  const initialOrder = table.getAllLeafColumns().map((col) => ({ id: col.id }));
+  const [columnOrder, setColumnOrder] = useState<SortableItem[]>(initialOrder);
 
-function ColumnVisibilityMenu<TData>({ table }: { table: TSTable<TData> }) {
-  const [columnOrder, setColumnOrder] = useState(() => table.getAllLeafColumns().map((col) => col.id));
-
-  const sensors = useSensors(useSensor(PointerSensor));
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-
-    if (active.id !== over?.id) {
-      const oldIndex = columnOrder.indexOf(active.id as string);
-      const newIndex = columnOrder.indexOf(over?.id as string);
-      const newOrder = arrayMove(columnOrder, oldIndex, newIndex);
-      setColumnOrder(newOrder);
-      table.setColumnOrder(newOrder);
-    }
+  const handleSort = (newOrder: SortableItem[]) => {
+    setColumnOrder(newOrder);
+    table.setColumnOrder(newOrder.map((item) => item.id));
   };
 
   return (
@@ -689,23 +680,31 @@ function ColumnVisibilityMenu<TData>({ table }: { table: TSTable<TData> }) {
       <Menu.Target>
         <Button>Columns</Button>
       </Menu.Target>
+
       <Menu.Dropdown>
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={columnOrder} strategy={verticalListSortingStrategy}>
-            {columnOrder.map((columnId) => {
-              const column = table.getColumn(columnId);
-              if (!column) return null;
-              return (
-                <SortableColumnItem
-                  key={column.id}
-                  columnId={column.id}
-                  isVisible={column.getIsVisible()}
-                  toggleVisibility={() => column.toggleVisibility(!column.getIsVisible())}
+        <ReactSortable
+          list={columnOrder}
+          setList={handleSort}
+          animation={200}
+          handle='.drag-handle'
+          direction='vertical'
+          ghostClass='sortable-ghost'
+        >
+          {columnOrder.map((item) => {
+            const column = table.getColumn(item.id);
+            if (!column) return null;
+            return (
+              <div key={item.id} className='flex items-center gap-2 px-2 py-2 group dark:hover:bg-dark-400 rounded'>
+                <Icon icon='ic:round-drag-indicator' className='size-5  drag-handle' />
+                <Checkbox
+                  label={item.id}
+                  checked={column.getIsVisible()}
+                  onClick={() => column.toggleVisibility(!column.getIsVisible())}
                 />
-              );
-            })}
-          </SortableContext>
-        </DndContext>
+              </div>
+            );
+          })}
+        </ReactSortable>
       </Menu.Dropdown>
     </Menu>
   );

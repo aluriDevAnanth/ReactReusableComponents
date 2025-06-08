@@ -8,6 +8,8 @@ import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { DateInput } from '@mantine/dates';
+import { mkConfig, generateCsv, download } from 'export-to-csv';
+import dayjs from 'dayjs';
 
 function AddComponent<TData>({ table }: { table: Table<TData> }) {
   const [open, setOpen] = useState(false);
@@ -45,7 +47,10 @@ function AddComponent<TData>({ table }: { table: Table<TData> }) {
       >
         <div className='flex justify-center items-center w-full'>
           <form onSubmit={formState.handleSubmit(AddFunction)} className='w-full'>
-            <Fieldset legend={<p className='text-2xl font-semibold'>Add User</p>} className='mx-auto grid grid-cols-2 gap-4'>
+            <Fieldset
+              legend={<p className='text-2xl font-semibold'>Add User</p>}
+              className='mx-auto grid grid-cols-2 gap-4'
+            >
               <TextInput
                 {...formState.register('name')}
                 data-autofocus
@@ -109,7 +114,13 @@ function AddComponent<TData>({ table }: { table: Table<TData> }) {
   );
 }
 
-function UserOpsCell({ row, setData }: { row: Row<UserType>; setData: React.Dispatch<React.SetStateAction<UserType[]>> }) {
+function UserOpsCell({
+  row,
+  setData,
+}: {
+  row: Row<UserType>;
+  setData: React.Dispatch<React.SetStateAction<UserType[]>>;
+}) {
   const [open, setOpen] = useState(false);
   const formState = useForm<UserType>({
     resolver: zodResolver(UserSchema),
@@ -141,7 +152,10 @@ function UserOpsCell({ row, setData }: { row: Row<UserType>; setData: React.Disp
         onClose={() => setOpen(false)}
       >
         <form onSubmit={formState.handleSubmit(editFunction)} className='w-full'>
-          <Fieldset legend={<p className='text-xl font-semibold'>Edit User</p>} className='mx-auto grid grid-cols-2 gap-4'>
+          <Fieldset
+            legend={<p className='text-xl font-semibold'>Edit User</p>}
+            className='mx-auto grid grid-cols-2 gap-4'
+          >
             <TextInput
               {...formState.register('name')}
               data-autofocus
@@ -240,6 +254,22 @@ function RowExpansion<TData>({ row }: { row: Row<TData> }) {
   );
 }
 
+function handleExportToCSV<TData>(table: Table<TData>) {
+  const rows = table.getSortedRowModel().rows;
+  const csvConfig = mkConfig({
+    fieldSeparator: ',',
+    filename: `UsersTableData`,
+    decimalSeparator: '.',
+    useKeysAsHeaders: true,
+  });
+  const rowData = rows.map((row) => ({
+    ...row.original,
+    birthDate: dayjs((row.original as UserType).birthDate).format('DD-MM-YYYY'),
+  }));
+  const csv = generateCsv(csvConfig)(rowData);
+  download(csvConfig)(csv);
+}
+
 export default function TableTesting() {
   const [data, setData] = useState(UserSchema.array().parse(usersData));
 
@@ -299,6 +329,7 @@ export default function TableTesting() {
       rowsPerPage={10}
       AddComponent={AddComponent}
       RowExpansion={RowExpansion}
+      handleExportToCSV={handleExportToCSV}
     />
   );
 }
