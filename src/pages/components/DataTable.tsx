@@ -16,7 +16,15 @@ import {
   type RowData,
 } from '@tanstack/react-table';
 
-import { useMemo, type JSX, type CSSProperties, useEffect, useState, useRef } from 'react';
+import {
+  useMemo,
+  type JSX,
+  type CSSProperties,
+  useEffect,
+  useState,
+  useRef,
+  Fragment,
+} from 'react';
 
 import {
   Table,
@@ -93,7 +101,10 @@ export default function DataTable<TData, TValue>({
     } else if (!start?.isValid() && end) {
       return dayjs(cellValue).isBefore(dayjs(end));
     } else if (start && end && start?.isValid() && end?.isValid()) {
-      return dayjs(start).isBefore(dayjs(cellValue)) && dayjs(cellValue).isBefore(dayjs(end));
+      return (
+        dayjs(start).isBefore(dayjs(cellValue)) &&
+        dayjs(cellValue).isBefore(dayjs(end))
+      );
     }
 
     return true;
@@ -106,7 +117,9 @@ export default function DataTable<TData, TValue>({
     columnResizeMode: 'onEnd',
     state: tableState,
     onStateChange: (updater) => {
-      setTableState((prev: TableState) => (typeof updater === 'function' ? updater(prev) : updater));
+      setTableState((prev: TableState) =>
+        typeof updater === 'function' ? updater(prev) : updater,
+      );
     },
     filterFns: {
       dateBetweenFilterFn: dateBetweenFilterFn,
@@ -147,7 +160,12 @@ export default function DataTable<TData, TValue>({
   return (
     <div
       ref={ref}
-      className={clsx('p-4', colorScheme == 'light' ? fullscreen && 'bg-white' : fullscreen && 'bg-[#242424]')}
+      className={clsx(
+        'p-4',
+        colorScheme == 'light'
+          ? fullscreen && 'bg-white'
+          : fullscreen && 'bg-[#242424]',
+      )}
     >
       <div className='flex justify-between items-center mb-3'>
         <div className='flex gap-3 items-center'>
@@ -205,25 +223,126 @@ export default function DataTable<TData, TValue>({
                         header.isPlaceholder ? null : (
                           <div
                             className={`flex items-center justify-between gap-2  ${
-                              header.column.getCanSort() ? 'cursor-pointer select-none' : ''
+                              header.column.getCanSort()
+                                ? 'cursor-pointer select-none'
+                                : ''
                             }`}
                             onClick={header.column.getToggleSortingHandler()}
                           >
                             <div className='flex gap-2 items-center'>
                               <p className='select-none'>
-                                {flexRender(header.column.columnDef.header, header.getContext())}
+                                {flexRender(
+                                  header.column.columnDef.header,
+                                  header.getContext(),
+                                )}
                               </p>
                               {
                                 {
-                                  asc: <Icon icon='tabler:arrow-narrow-up' className='size-4' />,
-                                  desc: <Icon icon='tabler:arrow-narrow-down' className='size-4' />,
-                                  false: <Icon icon='tabler:arrows-down-up' className='size-4 opacity-70' />,
+                                  asc: (
+                                    <Icon
+                                      icon='tabler:arrow-narrow-up'
+                                      className='size-4'
+                                    />
+                                  ),
+                                  desc: (
+                                    <Icon
+                                      icon='tabler:arrow-narrow-down'
+                                      className='size-4'
+                                    />
+                                  ),
+                                  false: (
+                                    <Icon
+                                      icon='tabler:arrows-down-up'
+                                      className='size-4 opacity-70'
+                                    />
+                                  ),
                                 }[header.column.getIsSorted() as string]
                               }
                             </div>
 
-                            {!header.isPlaceholder && header.column.getCanPin() && (
-                              <div className='mr-3 flex gap-2 items-center'>
+                            {!header.isPlaceholder &&
+                              header.column.getCanPin() && (
+                                <div className='mr-3 flex gap-2 items-center'>
+                                  {header.column.getIsPinned() !== 'left' ? (
+                                    <ActionIcon
+                                      size='xs'
+                                      className='border rounded px-2'
+                                      onClick={() => {
+                                        header.column.pin('left');
+                                      }}
+                                    >
+                                      <Icon icon='tabler:chevron-left' />
+                                    </ActionIcon>
+                                  ) : null}
+                                  {header.column.getIsPinned() ? (
+                                    <ActionIcon
+                                      size='xs'
+                                      className='border rounded px-2'
+                                      onClick={() => {
+                                        header.column.pin(false);
+                                      }}
+                                    >
+                                      <Icon icon='tabler:x' />
+                                    </ActionIcon>
+                                  ) : null}
+                                  {header.column.getIsPinned() !== 'right' ? (
+                                    <ActionIcon
+                                      size='xs'
+                                      className='border rounded px-2'
+                                      onClick={() => {
+                                        header.column.pin('right');
+                                      }}
+                                    >
+                                      <Icon icon='tabler:chevron-right' />
+                                    </ActionIcon>
+                                  ) : null}
+                                </div>
+                              )}
+                          </div>
+                        )
+                      ) : header.isPlaceholder ? null : (
+                        <div
+                          className={`flex-col items-center justify-between space-y-2 max-w-fit mx-auto ${
+                            header.column.getCanSort()
+                              ? 'cursor-pointer select-none'
+                              : ''
+                          }`}
+                          onClick={header.column.getToggleSortingHandler()}
+                        >
+                          <div className='flex gap-2 items-center max-w-fit'>
+                            <p>
+                              {flexRender(
+                                header.column.columnDef.header,
+                                header.getContext(),
+                              )}
+                            </p>
+                            {
+                              {
+                                asc: (
+                                  <Icon
+                                    icon='tabler:arrow-narrow-up'
+                                    className='size-4'
+                                  />
+                                ),
+                                desc: (
+                                  <Icon
+                                    icon='tabler:arrow-narrow-down'
+                                    className='size-4'
+                                  />
+                                ),
+                                false: (
+                                  <Icon
+                                    icon='tabler:arrows-down-up'
+                                    className='size-4 opacity-70'
+                                  />
+                                ),
+                              }[header.column.getIsSorted() as string]
+                            }
+                          </div>
+
+                          {!header.isPlaceholder &&
+                            header.column.getCanPin() && (
+                              <div className='flex gap-2 items-center max-w-fit'>
                                 {header.column.getIsPinned() !== 'left' ? (
                                   <ActionIcon
                                     size='xs'
@@ -259,63 +378,6 @@ export default function DataTable<TData, TValue>({
                                 ) : null}
                               </div>
                             )}
-                          </div>
-                        )
-                      ) : header.isPlaceholder ? null : (
-                        <div
-                          className={`flex-col items-center justify-between space-y-2 max-w-fit mx-auto ${
-                            header.column.getCanSort() ? 'cursor-pointer select-none' : ''
-                          }`}
-                          onClick={header.column.getToggleSortingHandler()}
-                        >
-                          <div className='flex gap-2 items-center max-w-fit'>
-                            <p>{flexRender(header.column.columnDef.header, header.getContext())}</p>
-                            {
-                              {
-                                asc: <Icon icon='tabler:arrow-narrow-up' className='size-4' />,
-                                desc: <Icon icon='tabler:arrow-narrow-down' className='size-4' />,
-                                false: <Icon icon='tabler:arrows-down-up' className='size-4 opacity-70' />,
-                              }[header.column.getIsSorted() as string]
-                            }
-                          </div>
-
-                          {!header.isPlaceholder && header.column.getCanPin() && (
-                            <div className='flex gap-2 items-center max-w-fit'>
-                              {header.column.getIsPinned() !== 'left' ? (
-                                <ActionIcon
-                                  size='xs'
-                                  className='border rounded px-2'
-                                  onClick={() => {
-                                    header.column.pin('left');
-                                  }}
-                                >
-                                  <Icon icon='tabler:chevron-left' />
-                                </ActionIcon>
-                              ) : null}
-                              {header.column.getIsPinned() ? (
-                                <ActionIcon
-                                  size='xs'
-                                  className='border rounded px-2'
-                                  onClick={() => {
-                                    header.column.pin(false);
-                                  }}
-                                >
-                                  <Icon icon='tabler:x' />
-                                </ActionIcon>
-                              ) : null}
-                              {header.column.getIsPinned() !== 'right' ? (
-                                <ActionIcon
-                                  size='xs'
-                                  className='border rounded px-2'
-                                  onClick={() => {
-                                    header.column.pin('right');
-                                  }}
-                                >
-                                  <Icon icon='tabler:chevron-right' />
-                                </ActionIcon>
-                              ) : null}
-                            </div>
-                          )}
                         </div>
                       )}
 
@@ -361,7 +423,9 @@ export default function DataTable<TData, TValue>({
       <div className='mt-4 flex justify-between items-center'>
         <div className='flex gap-3 items-center'>
           <p className='text-sm text-gray-700 dark:text-slate-50'>
-            {`${table.getFilteredRowModel().rows.length} of ${table.getPrePaginationRowModel().rows.length} rows`}
+            {`${table.getFilteredRowModel().rows.length} of ${
+              table.getPrePaginationRowModel().rows.length
+            } rows`}
           </p>
           <NumberInput
             className='w-20'
@@ -386,9 +450,17 @@ export default function DataTable<TData, TValue>({
           <Select
             data={rowsPerPageOptions.map((q) => q.toString())}
             withCheckIcon
-            value={table.getState().pagination?.pageSize.toString() || rowsPerPage.toString()}
+            value={
+              table.getState().pagination?.pageSize.toString() ||
+              rowsPerPage.toString()
+            }
             onChange={(value) =>
-              table.setPageSize(parseInt(value || table.getState().pagination?.pageSize.toString(), 10))
+              table.setPageSize(
+                parseInt(
+                  value || table.getState().pagination?.pageSize.toString(),
+                  10,
+                ),
+              )
             }
           />
         </div>
@@ -409,8 +481,8 @@ function TableBody<TData>({
   return (
     <Table.Tbody>
       {table.getRowModel().rows.map((row) => (
-        <>
-          <Table.Tr key={row.id}>
+        <Fragment key={row.id}>
+          <Table.Tr>
             {row.getVisibleCells().map((cell) => (
               <Table.Td
                 key={cell.id}
@@ -433,16 +505,21 @@ function TableBody<TData>({
               </Table.Td>
             </Table.Tr>
           )}
-        </>
+        </Fragment>
       ))}
     </Table.Tbody>
   );
 }
 
-function getCommonPinningStyles<TData>(column: Column<TData>, colorScheme: MantineColorScheme): CSSProperties {
+function getCommonPinningStyles<TData>(
+  column: Column<TData>,
+  colorScheme: MantineColorScheme,
+): CSSProperties {
   const isPinned = column.getIsPinned();
-  const isLastLeftPinnedColumn = isPinned === 'left' && column.getIsLastColumn('left');
-  const isFirstRightPinnedColumn = isPinned === 'right' && column.getIsFirstColumn('right');
+  const isLastLeftPinnedColumn =
+    isPinned === 'left' && column.getIsLastColumn('left');
+  const isFirstRightPinnedColumn =
+    isPinned === 'right' && column.getIsFirstColumn('right');
 
   return {
     boxShadow: isLastLeftPinnedColumn
@@ -456,12 +533,16 @@ function getCommonPinningStyles<TData>(column: Column<TData>, colorScheme: Manti
     position: isPinned ? 'sticky' : 'relative',
     width: column.getSize(),
     zIndex: isPinned ? 1 : 0,
-    backgroundColor: isPinned ? (colorScheme == 'dark' ? 'black' : 'white') : undefined,
+    backgroundColor: isPinned
+      ? colorScheme == 'dark'
+        ? 'black'
+        : 'white'
+      : undefined,
   };
 }
 
 function GlobalFilter<TData>({ table }: { table: TSTable<TData> }) {
-  const [value, setValue] = useState('');
+  const [value, setValue] = useState(table.getState().globalFilter);
 
   const debounced = useDebouncedCallback(
     (value: string) => {
@@ -471,40 +552,50 @@ function GlobalFilter<TData>({ table }: { table: TSTable<TData> }) {
   );
 
   return (
-    <div className='relative w-full'>
-      <TextInput
-        placeholder='Search...'
-        className='w-full'
-        value={value}
-        onChange={(e) => {
-          const input = e.currentTarget.value;
-          setValue(input);
-          debounced(input);
-        }}
-      />
-      {table.getState().globalFilter && (
-        <Icon
-          onClick={() => {
-            table.resetGlobalFilter();
-            setValue('');
-          }}
-          icon='tabler:x'
-          className='absolute top-1/4 right-1 size-5 text-red-500 cursor-pointer'
-        />
-      )}
-    </div>
+    <TextInput
+      rightSection={
+        table.getState().globalFilter && (
+          <Icon
+            onClick={() => {
+              table.resetGlobalFilter();
+              setValue('');
+            }}
+            icon='tabler:x'
+            className='size-5 text-red-500 cursor-pointer'
+          />
+        )
+      }
+      placeholder='Search...'
+      className='w-full'
+      value={value}
+      onChange={(e) => {
+        const input = e.currentTarget.value;
+        setValue(input);
+        debounced(input);
+      }}
+    />
   );
 }
 
-function ColumnFilter<TData, TValue>({ column }: { column: Column<TData, TValue> }) {
+function ColumnFilter<TData, TValue>({
+  column,
+}: {
+  column: Column<TData, TValue>;
+}) {
   const columnFilterValue = column.getFilterValue();
   const { filterVariant } = column.columnDef.meta ?? {};
 
   // === Top-level state ===
   const [textValue, setTextValue] = useState(String(columnFilterValue ?? ''));
-  const [numberValue, setNumberValue] = useState<number | ''>(Number(columnFilterValue) || '');
-  const [numberMin, setNumberMin] = useState<number | ''>((columnFilterValue as [number, number])?.[0] ?? '');
-  const [numberMax, setNumberMax] = useState<number | ''>((columnFilterValue as [number, number])?.[1] ?? '');
+  const [numberValue, setNumberValue] = useState<number | ''>(
+    Number(columnFilterValue) || '',
+  );
+  const [numberMin, setNumberMin] = useState<number | ''>(
+    (columnFilterValue as [number, number])?.[0] ?? '',
+  );
+  const [numberMax, setNumberMax] = useState<number | ''>(
+    (columnFilterValue as [number, number])?.[1] ?? '',
+  );
   const [dateStart, setDateStart] = useState<Dayjs | null>(
     (columnFilterValue as [Dayjs | null, Dayjs | null])?.[0] ?? null,
   );
@@ -543,10 +634,16 @@ function ColumnFilter<TData, TValue>({ column }: { column: Column<TData, TValue>
 
   // === Render filters ===
   if (filterVariant === 'numberRange') {
-    const facetedValues = Array.from(column.getFacetedUniqueValues()?.keys() ?? []);
-    const numericValues = facetedValues.filter((v) => typeof v === 'number') as number[];
+    const facetedValues = Array.from(
+      column.getFacetedUniqueValues()?.keys() ?? [],
+    );
+    const numericValues = facetedValues.filter(
+      (v) => typeof v === 'number',
+    ) as number[];
     const minVal = Math.min(...numericValues);
     const maxVal = Math.max(...numericValues);
+
+    console.log(numberMin, 111, numberMax);
 
     return (
       <div className='flex gap-3 items-center'>
@@ -557,6 +654,7 @@ function ColumnFilter<TData, TValue>({ column }: { column: Column<TData, TValue>
             debouncedNumberRange([value as number, numberMax]);
           }}
           placeholder={`Min (${minVal})`}
+          thousandsGroupStyle={'lakh'}
           min={minVal}
           max={maxVal}
           className='w-full'
@@ -568,6 +666,7 @@ function ColumnFilter<TData, TValue>({ column }: { column: Column<TData, TValue>
             debouncedNumberRange([numberMin, value as number]);
           }}
           placeholder={`Max (${maxVal})`}
+          thousandsGroupStyle={'lakh'}
           min={minVal}
           max={maxVal}
           className='w-full'
@@ -577,7 +676,9 @@ function ColumnFilter<TData, TValue>({ column }: { column: Column<TData, TValue>
   }
 
   if (filterVariant === 'select') {
-    const facetedOptions = Array.from(column.getFacetedUniqueValues()?.keys() ?? []).sort();
+    const facetedOptions = Array.from(
+      column.getFacetedUniqueValues()?.keys() ?? [],
+    ).sort();
 
     return (
       <MultiSelect
@@ -589,14 +690,24 @@ function ColumnFilter<TData, TValue>({ column }: { column: Column<TData, TValue>
           label: String(option),
           value: String(option),
         }))}
-        value={columnFilterValue ? (Array.isArray(columnFilterValue) ? columnFilterValue : [columnFilterValue]) : []}
+        value={
+          columnFilterValue
+            ? Array.isArray(columnFilterValue)
+              ? columnFilterValue
+              : [columnFilterValue]
+            : []
+        }
       />
     );
   }
 
   if (filterVariant === 'number') {
-    const facetedValues = Array.from(column.getFacetedUniqueValues()?.keys() ?? []);
-    const numericValues = facetedValues.filter((v) => typeof v === 'number') as number[];
+    const facetedValues = Array.from(
+      column.getFacetedUniqueValues()?.keys() ?? [],
+    );
+    const numericValues = facetedValues.filter(
+      (v) => typeof v === 'number',
+    ) as number[];
     const minVal = Math.min(...numericValues);
     const maxVal = Math.max(...numericValues);
 
@@ -621,7 +732,6 @@ function ColumnFilter<TData, TValue>({ column }: { column: Column<TData, TValue>
       <div>
         <div className='flex space-x-2'>
           <DateInput
-            clearable
             value={dateStart?.toDate()}
             onChange={(value) => {
               setDateStart(value ? dayjs(value) : null);
@@ -630,6 +740,7 @@ function ColumnFilter<TData, TValue>({ column }: { column: Column<TData, TValue>
             placeholder='Start date'
             valueFormat='YYYY-MM-DD'
             className='w-full'
+            clearable
           />
           <DateInput
             clearable
@@ -694,12 +805,20 @@ function ColumnVisibilityMenu<TData>({ table }: { table: TSTable<TData> }) {
             const column = table.getColumn(item.id);
             if (!column) return null;
             return (
-              <div key={item.id} className='flex items-center gap-2 px-2 py-2 group dark:hover:bg-dark-400 rounded'>
-                <Icon icon='ic:round-drag-indicator' className='size-5  drag-handle' />
+              <div
+                key={item.id}
+                className='flex items-center gap-2 px-2 py-2 group dark:hover:bg-dark-400 rounded'
+              >
+                <Icon
+                  icon='ic:round-drag-indicator'
+                  className='size-5  drag-handle'
+                />
                 <Checkbox
                   label={item.id}
                   checked={column.getIsVisible()}
-                  onClick={() => column.toggleVisibility(!column.getIsVisible())}
+                  onChange={() =>
+                    column.toggleVisibility(!column.getIsVisible())
+                  }
                 />
               </div>
             );

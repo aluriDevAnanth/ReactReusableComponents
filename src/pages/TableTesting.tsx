@@ -2,14 +2,27 @@ import { UserSchema, type UserType } from '../schemas';
 import DataTable from './components/DataTable';
 import { usersData } from '../utils/data/usersData';
 import type { CellContext, ColumnDef, Row, Table } from '@tanstack/react-table';
-import { ActionIcon, Button, Fieldset, Menu, Modal, NumberInput, Select, TextInput } from '@mantine/core';
+import {
+  ActionIcon,
+  Button,
+  Fieldset,
+  Menu,
+  Modal,
+  NumberInput,
+  Select,
+  TextInput,
+} from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { DateInput } from '@mantine/dates';
-import { mkConfig, generateCsv, download } from 'export-to-csv';
-import dayjs from 'dayjs';
+import {
+  mkConfig,
+  generateCsv,
+  download,
+  type ColumnHeader,
+} from 'export-to-csv';
 
 function AddComponent<TData>({ table }: { table: Table<TData> }) {
   const [open, setOpen] = useState(false);
@@ -46,7 +59,10 @@ function AddComponent<TData>({ table }: { table: Table<TData> }) {
         onClose={() => setOpen(false)}
       >
         <div className='flex justify-center items-center w-full'>
-          <form onSubmit={formState.handleSubmit(AddFunction)} className='w-full'>
+          <form
+            onSubmit={formState.handleSubmit(AddFunction)}
+            className='w-full'
+          >
             <Fieldset
               legend={<p className='text-2xl font-semibold'>Add User</p>}
               className='mx-auto grid grid-cols-2 gap-4'
@@ -130,7 +146,9 @@ function UserOpsCell({
   function editFunction(values: UserType) {
     try {
       const parsedValues = UserSchema.parse(values);
-      setData((prev) => prev.map((p) => (p.name == parsedValues.name ? parsedValues : p)));
+      setData((prev) =>
+        prev.map((p) => (p.name == parsedValues.name ? parsedValues : p)),
+      );
       setOpen(false);
     } catch (e) {
       console.error(e);
@@ -151,7 +169,10 @@ function UserOpsCell({
         opened={open}
         onClose={() => setOpen(false)}
       >
-        <form onSubmit={formState.handleSubmit(editFunction)} className='w-full'>
+        <form
+          onSubmit={formState.handleSubmit(editFunction)}
+          className='w-full'
+        >
           <Fieldset
             legend={<p className='text-xl font-semibold'>Edit User</p>}
             className='mx-auto grid grid-cols-2 gap-4'
@@ -223,10 +244,16 @@ function UserOpsCell({
         </Menu.Target>
 
         <Menu.Dropdown>
-          <Menu.Item onClick={() => setOpen(true)} leftSection={<Icon icon='tabler:pencil' className='size-4' />}>
+          <Menu.Item
+            onClick={() => setOpen(true)}
+            leftSection={<Icon icon='tabler:pencil' className='size-4' />}
+          >
             Edit User
           </Menu.Item>
-          <Menu.Item color='red' leftSection={<Icon icon='tabler:trash' className='size-4' />}>
+          <Menu.Item
+            color='red'
+            leftSection={<Icon icon='tabler:trash' className='size-4' />}
+          >
             Delete User
           </Menu.Item>
         </Menu.Dropdown>
@@ -255,18 +282,35 @@ function RowExpansion<TData>({ row }: { row: Row<TData> }) {
 }
 
 function handleExportToCSV<TData>(table: Table<TData>) {
-  const rows = table.getSortedRowModel().rows;
+  const columns = table
+    .getVisibleLeafColumns()
+    .map((col) => col.id != 'Ops' && col.id)
+    .filter(Boolean);
+
+  const rows = table
+    .getSortedRowModel()
+    .rows.map((r) =>
+      Object.fromEntries(
+        Object.entries(r.original as Record<string, unknown>).map(([k, v]) => [
+          k,
+          v instanceof Date
+            ? v.toISOString().split('T')[0]
+            : (v as string | number | boolean | null | undefined),
+        ]),
+      ),
+    );
+
   const csvConfig = mkConfig({
     fieldSeparator: ',',
+    columnHeaders: columns.map((col) => ({
+      key: col,
+      displayLabel: col,
+    })) as ColumnHeader[],
     filename: `UsersTableData`,
     decimalSeparator: '.',
-    useKeysAsHeaders: true,
   });
-  const rowData = rows.map((row) => ({
-    ...row.original,
-    birthDate: dayjs((row.original as UserType).birthDate).format('DD-MM-YYYY'),
-  }));
-  const csv = generateCsv(csvConfig)(rowData);
+
+  const csv = generateCsv(csvConfig)(rows);
   download(csvConfig)(csv);
 }
 
@@ -314,7 +358,9 @@ export default function TableTesting() {
       footer: (props) => props.column.id,
       cell: (cellContext: CellContext<UserType, unknown>) => {
         const value = cellContext.getValue();
-        return value instanceof Date ? value.toISOString().split('T')[0] : String(value);
+        return value instanceof Date
+          ? value.toISOString().split('T')[0]
+          : String(value);
       },
     },
   ];
